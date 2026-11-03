@@ -555,6 +555,8 @@ global mode, StoryActDropdown
         if (mode = "Fool's Hunt" || mode = "Summer Hunt") { ; [Fixed] was "Fools Event", which never matched
             CheckForCardSelection()
         }
+        if (mode = "Summer Hunt")
+            try DG_Tick()   ; [Damage guard] once a minute: check you're not the lowest damage
 
 
         CheckForMahoraga()
@@ -641,6 +643,7 @@ HandleStageEnd() {
         AddToLog("Defeat detected - Stage Length: " stageLength)
         loss += 1
     }
+    try DG_MatchEnd()   ; [Damage guard] lowest damage 2 matches in a row -> Dungeon for the rest of the hour
 
     SendInput("{Tab}") ; Open Player leaderboard
     try {   ; [Framework] a webhook failure must not end the run (Anime Guardians pattern)

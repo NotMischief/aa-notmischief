@@ -57,6 +57,7 @@ SetWorkingDir(A_ScriptDir)   ; [Fix] files like Settings\WebhookURL.txt are open
 #Include %A_ScriptDir%\Lib\Improved\VisionHelper.ahk   ; [Python vision] fast placement map + RapidOCR
 #Include %A_ScriptDir%\Lib\Improved\DesignMode.ahk   ; [Design mode] auto-reload + window picture while Claude edits the UI
 #Include %A_ScriptDir%\Lib\Improved\SummerHunt.ahk   ; [Summer Hunt] text-based vote / cards / end screen
+#Include %A_ScriptDir%\Lib\Improved\DamageGuard.ahk   ; [Damage guard] never the lowest damage in Summer matchmaking
 #Include %A_ScriptDir%\Lib\Improved\WatchMode.ahk   ; [Watch mode] F9: pictures + lobby reload for live fixes
 #Include %A_ScriptDir%\Lib\Improved\StatsPanel.ahk   ; [Polish] live stats strip
 #Include %A_ScriptDir%\Lib\Improved\RecordMode.ahk   ; [Record mode] F8: watch and record while you play

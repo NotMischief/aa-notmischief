@@ -27,7 +27,12 @@ AttemptUpgrade() {
     ; [Farm done] once your ticked units (farm units) are all maxed, upgrade every placed unit between
     ; placements too - otherwise yen piled up while the rest of the team was still being placed
     allMode := false
-    if (!anyToUpgrade) {
+    if DG_Boost() {   ; [Damage guard] behind in damage: upgrade every placed unit (limits still apply)
+        allMode := true
+        static loggedBoost := 0
+        if (A_TickCount - loggedBoost > 60000)
+            AddToLog("[Damage guard] Behind in damage - upgrading every placed unit"), loggedBoost := A_TickCount
+    } else if (!anyToUpgrade) {
         farmDone := false
         for coord in maxedCoordinates {
             ue := inChallengeMode && ChallengeBox.Value ? "challengeUpgradeEnabled" coord.slot : GetNameForMode() "upgradeEnabled" coord.slot

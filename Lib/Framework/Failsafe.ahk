@@ -72,7 +72,7 @@ FW_StepEnded() {
         return 0
     }
     w := ""
-    try w := SC_Where()
+    try w := SC_WhereSure()
     if (w = "lobby" || w = "queue") {
         FW_Log("[Failsafe] Lost track of what to do - this is the lobby, starting again")
         return StartSelectedMode

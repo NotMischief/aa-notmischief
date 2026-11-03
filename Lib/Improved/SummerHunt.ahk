@@ -481,7 +481,7 @@ SH_EnterHunt() {
         Reconnect()
         ; [Fix] already teleported into a match (the queue finished while we were walking) - stop walking
         w := ""
-        try w := SC_Where()
+        try w := SC_WhereSure("lobby")
         if (w = "match" || w = "vote" || w = "loading") {
             AddToLog("[Summer] Already in a match (" w ") - carrying on there")
             return NextStep(RestartStage)

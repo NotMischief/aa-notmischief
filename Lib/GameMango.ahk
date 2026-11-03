@@ -594,7 +594,7 @@ global mode, StoryActDropdown
         if (A_TickCount - msLook > 20000) {
             msLook := A_TickCount
             if !CL_BaseBarVisible() {
-                w := SC_Where()
+                w := SC_WhereSure("match|vote")
                 if (w = "end" && !(CheckForXp(true) || CheckForReturnToLobby() || CheckForNextText()))
                     SC_Recover(w, "the match")
                 else if (w = "lobby" || w = "dungeon_menu")
@@ -1077,7 +1077,7 @@ CheckLobby() {
         ; play it instead of waiting for a lobby that won't come
         if (A_TickCount - clStart > 30000 && A_TickCount - clLook > 10000) {   ; (a teleport out takes a while)
             clLook := A_TickCount
-            w := SC_Where()
+            w := SC_WhereSure("lobby|end")
             if (w = "match" || w = "vote") {
                 AddToLog("[Where am I] Waiting for the lobby but this is a match (" w ") - playing it")
                 return NextStep(RestartStage)
@@ -1158,6 +1158,17 @@ SC_Where() {
     return ""
 }
 
+; [Slow PCs] a slow load or a lagging screen must not be mistaken for "wrong place": only act when two
+; looks about 5 s apart agree (and neither is a loading screen / queue). Otherwise "" = keep waiting.
+SC_WhereSure(expect := "") {
+    a := SC_Where()
+    if (a = "" || a = "loading" || a = "queue" || (expect != "" && RegExMatch(a, "^(" expect ")$")))
+        return a      ; nothing to act on, or it's where we expected to be - no second look needed
+    Sleep(5000)
+    b := SC_Where()
+    return (a = b) ? a : ""
+}
+
 ; called from a waiting loop; jumps to the right step when the screen shows something else
 SC_Recover(where, waitingFor) {
     if (where = "lobby") {
@@ -1201,7 +1212,7 @@ CheckLoaded() {
         StageGuard.Check("Load", "stage did not load")   ; [Framework]
         if (A_TickCount - clStart > 20000 && A_TickCount - clLook > 10000) {   ; [Where am I]
             clLook := A_TickCount
-            w := SC_Where()
+            w := SC_WhereSure("match|vote")
             if (w = "match" || w = "vote") {
                 AddToLog("Successfully Loaded In (seen by the screen: " w ")")
                 break

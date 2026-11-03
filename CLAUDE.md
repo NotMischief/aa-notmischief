@@ -23,6 +23,8 @@ to this one, read it too — it has the owner's paths, history and open tasks (i
 - Unreachable code after `return` raises a `#Warn` box that blocks reload.
 - Assigning a global inside a function needs `global X` (declare once per function).
 - For-loop variables are restored after the loop (don't use them afterwards).
+- `if (...)` + one-line `try X` + `else` is a load error ("Unexpected Else" - `try` has its own
+  `else`). Use braces around if/else bodies that contain `try`.
 - Click coordinates are **client** coords of the 800x600 Roblox picture; FindText (`FT`) coords are ~31 px lower.
 - Files are UTF-8 **with BOM**; most use LF, some CRLF — keep whatever the file already uses.
 - Validate syntax with AutoHotkey itself: `AutoHotkey64.exe /ErrorStdOut /validate Main.ahk` (Windows).

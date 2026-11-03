@@ -165,8 +165,8 @@ SendWebhookWithTime(isWin, stageLength) {
     }
 
     ; Read webhook URL from file
-    WebhookURL := FileRead(WebhookURLFile, "UTF-8")
-    if !(WebhookURL ~= 'i)https?:\/\/discord\.com\/api\/webhooks\/(\d{18,19})\/[\w-]{68}') {
+    WebhookURL := WH_URL()
+    if (WebhookURL = "") {
         AddToLog("Invalid webhook URL - skipping webhook")
         return
     }
@@ -421,9 +421,14 @@ WebhookScreenshot(title, description, color := 0x0dffff, status := "") {
         "long_lose", long_lose_messages
     )
 
+    global WebhookURL := WH_URL()   ; [Fix] read cleanly (no BOM / spaces / line breaks)
+    if (WebhookURL = "") {
+        AddToLog("[Webhook] No valid webhook URL in Settings\WebhookURL.txt - not sending")
+        return
+    }
     global webhook := WebHookBuilder(WebhookURL)
-    global WebhookURL := FileRead(WebhookURLFile, "UTF-8")
-    global DiscordUserID := FileRead(DiscordUserIDFile, "UTF-8")
+    global DiscordUserID := ""
+    try DiscordUserID := RegExReplace(FileRead(A_ScriptDir "\Settings\DiscordUSERID.txt", "UTF-8"), "[^\d]", "")
     global wins, loss, currentStreak, stageStartTime
 
     if (!IsSet(stageStartTime)) {
@@ -511,13 +516,23 @@ WebhookScreenshot(title, description, color := 0x0dffff, status := "") {
         myEmbed.setImage(attachment)
         myEmbed.setFooter({ text: footerText })
 
-        webhook.send({
+        res := webhook.send({
             content: UserIDSent,
             embeds: [myEmbed],
             files: [attachment]
         })
+        ; [Fix] the answer from Discord used to be ignored, so a refused webhook looked like a sent one
+        st := 0
+        try st := res.status
+        if (st >= 200 && st < 300)
+            AddToLog("[Webhook] Sent to Discord")
+        else {
+            txt := ""
+            try txt := SubStr(res.text, 1, 120)
+            AddToLog("[Webhook] Discord refused it (status " st "): " txt)
+        }
     } catch Error as err{
-        AddToLog("Unable to send webhook or build embed - continuing without sending")
+        AddToLog("[Webhook] Couldn't send (" err.Message ") - continuing without sending")
     }
 
     ; Cleanup
@@ -553,14 +568,13 @@ sendDCWebhook() {
     myEmbed.setDescription(":stopwatch: Disconnected At: " MacroRuntime "`n:stopwatch: Stage Runtime: " StageRuntime "")
     myEmbed.setColor(0xB00A0A)
 
-    try {
-        if (WebhookURL.Value != "") {
-            global Webhook := WebHookBuilder(WebhookURL.Value)
-        }
-    } catch {
+    ; [Fix] WebhookURL is the URL text by now (not the settings box), so WebhookURL.Value failed here
+    url := WH_URL()
+    if (url = "") {
         AddToLog("No webhook configured - skipping webhook")
         return
     }
+    global Webhook := WebHookBuilder(url)
 
     ; Send the webhook
     try {
@@ -573,4 +587,15 @@ sendDCWebhook() {
         AddToLog("Failed to send webhook")
     }
 
+}
+
+; [Fix] the webhook URL from Settings\WebhookURL.txt (full path), without BOM, spaces or line breaks.
+; "" when there is no valid Discord webhook URL.
+WH_URL() {
+    u := ""
+    try u := FileRead(A_ScriptDir "\Settings\WebhookURL.txt", "UTF-8")
+    u := Trim(StrReplace(u, Chr(0xFEFF), ""), " `t`r`n")
+    if RegExMatch(u, 'i)https?:\/\/discord\.com\/api\/webhooks\/(\d{18,19})\/[\w-]{68}', &m)
+        return m[0]
+    return ""
 }

@@ -58,30 +58,37 @@ DG_ReadBoard() {
             return rows
     }
     items := SH_Items(555, 70, 240, 300, 1.5)
-    names := [], vals := []
+    ; [Fix] text behind the see-through list (the "Level info" panel, and even your own big name tag over
+    ; your character) got paired with a row's number - once your name tag was taken as the TOP row while
+    ; you weren't even in the list. Real rows sit on a fixed grid under the header, 41 px apart.
+    hy := 0
+    for it in items
+        if RegExMatch(it.t, "people|total dama")
+            hy := hy ? Min(hy, it.y) : it.y
+    if !hy
+        hy := 88
+    rowY(y) {
+        k := Round((y - (hy + 33)) / 41)
+        return (k >= 0 && k <= 7 && Abs(y - (hy + 33 + 41 * k)) <= 9) ? k : -1
+    }
+    names := Map(), vals := Map()   ; row number -> item
     for it in items {
-        ; [Fix] the "Level info" panel behind the list shows through ("+25%", "Units/Skins +10%", "Secret
-        ; Portal Rate") - those are not players
         if RegExMatch(it.t, "people|total|damage|level|enemies|weather|modifier|boost|reward|portal|units|skins|%|\+")
             continue
-        if (it.x >= 715 && DG_Num(it.t) >= 0)
-            vals.Push(it)
-        else if (it.x >= 575 && it.x < 715 && StrLen(it.t) >= 2)   ; player names sit in the left part of the list
-            names.Push(it)
-    }
-    ; one player per row: each damage number takes the name on its line that sits furthest left (the
-    ; player name column; see-through panel text sits further right), each name used once
-    used := Map()
-    for v in vals {
-        best := 0, bestX := 9999
-        for i, nm in names
-            if (!used.Has(i) && Abs(v.y - nm.y) <= 12 && nm.x < bestX)
-                best := i, bestX := nm.x
-        if best {
-            used[best] := 1
-            rows.Push({name: names[best].t, dmg: DG_Num(v.t), y: names[best].y})
+        k := rowY(it.y)
+        if (k < 0)
+            continue
+        if (it.x >= 715 && DG_Num(it.t) >= 0) {
+            if !vals.Has(k)
+                vals[k] := it
+        } else if (it.x >= 575 && it.x < 715 && StrLen(it.t) >= 2) {
+            if (!names.Has(k) || it.x < names[k].x)   ; the name column is the left part of the row
+                names[k] := it
         }
     }
+    for k, v in vals
+        if names.Has(k)
+            rows.Push({name: names[k].t, dmg: DG_Num(v.t), y: names[k].y})
     SendInput("{Tab}")           ; close it again
     Sleep(300)
     if DG_ListOpen()

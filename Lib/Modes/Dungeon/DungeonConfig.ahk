@@ -1,0 +1,149 @@
+#Include %A_ScriptDir%\Lib\gui.ahk
+#Include %A_ScriptDir%\Main.ahk
+#Include %A_ScriptDir%\Lib\Modes\Dungeon\RoutePriorityPicker.ahk
+#Include %A_ScriptDir%\Lib\Modes\Dungeon\CursePriorityPicker.ahk
+#Include %A_ScriptDir%\Lib\Modes\Dungeon\ShrinePriorityPicker.ahk
+
+SaveDungeonConfig(*) {
+    SaveDungeonLocal
+    return
+}
+
+LoadDungeonConfig(*) {
+    LoadDungeonLocal
+    return
+}
+
+SaveDungeonConfigToFile(filePath) {
+    directory := "Settings"
+
+    if !DirExist(directory) {
+        DirCreate(directory)
+    }
+    if !FileExist(filePath) {
+        FileAppend("", filePath)
+    }
+
+    File := FileOpen(filePath, "w")
+    if !File {
+        AddToLog("Failed to save the dungeon configuration.")
+        return
+    }
+
+    File.WriteLine("[RoutePriority]")
+    for index, routeDropDown in routeDropDowns
+    {
+        File.WriteLine(Format("Room{}={}", index+1, routeDropDown.Text))
+    }
+
+    File.WriteLine("`n[CurseProtection]")
+    for index, curseDropDown in curseDropDowns
+    {
+        File.WriteLine(Format("Curse{}={}", index+1, curseDropDown.Text))
+    }
+
+    File.WriteLine("`n[ShrineProtection]")
+    for index, shrineDropDown in shrineDropDowns
+    {
+        File.WriteLine(Format("Shrine{}={}", index+1, shrineDropDown.Text))
+    }
+
+    File.Close()
+    if (debugMessages) {
+        AddToLog("Dungeon configuration saved to " filePath ".`n")
+    }
+
+}
+
+LoadDungeonConfigFromFile(filePath) {
+    global routeDropDowns
+    global curseDropDowns
+    global shrineDropDowns
+
+    if !FileExist(filePath) {
+        AddToLog("No dungeon configuration file found. Creating new local configuration.")
+	SaveDungeonLocal
+    } else {
+        ; Open file for reading
+        file := FileOpen(filePath, "r", "UTF-8")
+        if !file {
+            AddToLog("Failed to load the configuration.")
+            return
+        }
+
+        section := ""
+        ; Read settings from the file
+        while !file.AtEOF {
+            line := file.ReadLine()
+
+            ; Detect section headers
+            if RegExMatch(line, "^\[(.*)\]$", &match) {
+                section := match.1
+                continue
+            }
+
+            ; Process the lines based on the section
+            if (section = "RoutePriority") {
+                if RegExMatch(line, "Room(\d+)=(\w+)", &match) {
+                    slot := match.1
+                    value := match.2
+
+                    routePriorityOrder[slot - 1] := value
+
+                    routeDropDown := routeDropDowns[slot - 1]
+
+                    if (routeDropDown) {
+                        routeDropDown.Text := value
+                    }
+		    
+                }
+            }
+
+            if (section = "CurseProtection") {
+                if RegExMatch(line, "Curse(\d+)=(\w+)", &match) {
+                    slot := match.1
+                    value := match.2
+
+                    cursePriorityOrder[slot - 1] := value
+
+                    curseDropDown := curseDropDowns[slot - 1]
+
+                    if (curseDropDown) {
+                        curseDropDown.Text := value
+                    }
+		    
+                }
+            }
+
+            if (section = "ShrineProtection") {
+                if RegExMatch(line, "Shrine(\d+)=(\w+)", &match) {
+                    slot := match.1
+                    value := match.2
+
+                    shrinePriorityOrder[slot] := value
+
+                    shrineDropDown := shrineDropDowns[slot]
+
+                    if (shrineDropDown) {
+                        shrineDropDown.Text := value
+                    }
+                }
+            }       
+        }
+        file.Close()
+        if (debugMessages) {
+            AddToLog("Dungeon configuration loaded successfully.")
+        }
+    }
+}
+
+
+SaveDungeonLocal(*) {
+    SaveDungeonConfigToFile("Settings\RoutePriority.txt")
+}
+
+LoadDungeonLocal(*) {
+    LoadDungeonConfigFromFile("Settings\RoutePriority.txt")
+    UpdateEnabledCurses()
+    UpdateEnabledShrines()
+}

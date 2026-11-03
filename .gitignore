@@ -1,0 +1,9 @@
+Settings/
+Logs/
+Backup*/
+*.bak*
+*.old_*
+__pycache__/
+*.pyc
+Images/LEO.jpg
+Images/banner.png

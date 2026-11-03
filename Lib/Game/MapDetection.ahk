@@ -91,8 +91,21 @@ DetectMap() {
 DetectHuntMap(maxMs := 300000) {
     AddToLog("Trying to determine map for " ModeDropdown.Text "...")
     startTime := A_TickCount
+    lastBanner := 0, lastPics := 0
     
     Loop {
+        ; [Banner] Summer: the arrival banner names the map for a few seconds right after loading - this wait
+        ; used to run past it (20 s of loading-screen pictures), so the later banner read found nothing.
+        if (SH_On() && A_TickCount - lastBanner > 900) {
+            bm := ""
+            try bm := SH_BannerOnce(Mod(A_TickCount // 900, 2) ? 1 : 1.5)
+            lastBanner := A_TickCount
+            if (bm != "") {
+                AddToLog("Map from the banner: " bm)
+                UpdateMap(bm)
+                return bm
+            }
+        }
         ; [Fix] give up quickly when asked (the freeze must not wait for map recognition)
         if (maxMs < 300000 && A_TickCount - startTime > maxMs) {
             AddToLog("Loading screen not recognised within " (maxMs // 1000) "s - continuing without the map")
@@ -114,6 +127,14 @@ DetectHuntMap(maxMs := 300000) {
             UpdateMap("No Map Found") ; For Webhook
             return "no map found"
         }
+
+        ; [Lag] the old loading-screen pictures (40 full-screen searches) rarely match since the update -
+        ; in Summer only look for them about twice a second
+        if (SH_On() && A_TickCount - lastPics < 500) {
+            Sleep(100)
+            continue
+        }
+        lastPics := A_TickCount
 
         loadingScreens := Map(
             ; Story Maps

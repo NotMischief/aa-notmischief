@@ -610,42 +610,47 @@ SH_Queued() {
 ; ---- map name from the arrival banner ("Strange Town" / "Summer Hunt" / "Weather: Stormy") ---------
 ; Works for any map, even ones the macro has no loading-screen picture for.
 SH_MapFromBanner(waitMs := 8000) {
-    ; the map name is the big line right ABOVE "Summer Hunt" / "Weather: ..." - only trusted when one of those is there
-    start := A_TickCount
+    start := A_TickCount, n := 0
     while (A_TickCount - start < waitMs) {
-        items := SH_Items(0, 40, 800, 220)
-        for r in SH_Rows(items.Clone())   ; also try the words of one line joined ("Assassin" + "Park")
-            items.Push(r)
-        anchorY := 0
-        loading := false
-        for it in items
-            if InStr(it.t, "travelling")
-                loading := true
-        if (loading) {       ; the loading screen's text names the wrong map sometimes - wait for the real banner
-            Sleep(700)
-            continue
-        }
-        for it in items
-            if RegExMatch(it.t, "summer hunt|weather:|fool's hunt")
-                anchorY := anchorY ? Min(anchorY, it.y) : it.y
-        if (anchorY) {
-            ; only accept text that is (nearly) one of the 36 Summer map names - player names, titles
-            ; like "[Transcended]" and menu words are ignored
-            best := "", bestY := -1
-            for it in items {
-                t := Trim(RegExReplace(it.t, "\(summer\)", ""))
-                if (it.y < anchorY - 5 && it.y > bestY && StrLen(t) >= 4 && !InStr(t, "[")) {
-                    m := SH_CanonMap(t, true)
-                    if (m != "")
-                        best := m, bestY := it.y
-                }
-            }
-            if (best != "")
-                return best
-        }
-        Sleep(700)
+        n += 1
+        m := SH_BannerOnce(Mod(n, 2) ? 1 : 1.5)   ; every other look zoomed in - the banner font is fancy
+        if (m != "")
+            return m
+        Sleep(400)
     }
     return ""
+}
+
+; one look at the banner. The map name is the big line right ABOVE "Summer Hunt" / "Weather: ..." - only
+; trusted when one of those is there. [Fix] the stage title at the very top ("Planet Greenie (Summer)
+; Summer Hunt" - always that name in Summer) used to be taken as the anchor, so the real banner below it
+; was never accepted. Each anchor now only looks at the lines just above itself.
+SH_BannerOnce(scale := 1) {
+    items := SH_Items(0, 40, 800, 260, scale)
+    for r in SH_Rows(items.Clone())   ; also try the words of one line joined ("Assassin" + "Park")
+        items.Push(r)
+    for it in items
+        if InStr(it.t, "travelling")      ; the loading screen's text names the wrong map sometimes
+            return ""
+    best := "", bestGap := 999
+    for a in items {
+        if !RegExMatch(a.t, "summer hunt|weather:|fool's hunt")
+            continue
+        if (a.y < 75 || InStr(a.t, "greenie"))   ; the stage title at the top, not the banner
+            continue
+        for it in items {
+            gap := a.y - it.y
+            if (gap < 6 || gap > 90)
+                continue
+            t := Trim(RegExReplace(it.t, "\(summer\)|summer hunt.*|weather:.*", ""))
+            if (StrLen(t) < 4 || InStr(t, "["))
+                continue
+            m := SH_CanonMap(t, true)   ; only (nearly) one of the Summer map names counts
+            if (m != "" && gap < bestGap)
+                best := m, bestGap := gap
+        }
+    }
+    return best
 }
 
 ; ---- F10: record your own walk for the map you're on, right now ----------------------------------

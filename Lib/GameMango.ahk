@@ -1075,10 +1075,10 @@ CheckLobby() {
         }
         ; [Where am I] waiting for the lobby, but we're actually in a match (or it's loading/voting) -
         ; play it instead of waiting for a lobby that won't come
-        if (A_TickCount - clStart > 15000 && A_TickCount - clLook > 10000) {
+        if (A_TickCount - clStart > 30000 && A_TickCount - clLook > 10000) {   ; (a teleport out takes a while)
             clLook := A_TickCount
             w := SC_Where()
-            if (w = "match" || w = "vote" || w = "loading") {
+            if (w = "match" || w = "vote") {
                 AddToLog("[Where am I] Waiting for the lobby but this is a match (" w ") - playing it")
                 return NextStep(RestartStage)
             }

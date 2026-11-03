@@ -1063,6 +1063,7 @@ CheckForXp(closeLeaderboard := false) {
 CheckLobby() {
     StageGuard.Disarm("Stage")   ; [Framework] stage is over - its timeout no longer applies
     StageGuard.Arm("Lobby", FW_LobbyTimeoutMs)   ; [Framework]
+    clStart := A_TickCount, clLook := 0
     loop {
         Sleep 1000
         StageGuard.Check("Lobby", "lobby not reached")   ; [Framework]
@@ -1071,6 +1072,16 @@ CheckLobby() {
         }
         if (CheckForEndGameScreens()) {
             return NextStep(MonitorStage)
+        }
+        ; [Where am I] waiting for the lobby, but we're actually in a match (or it's loading/voting) -
+        ; play it instead of waiting for a lobby that won't come
+        if (A_TickCount - clStart > 15000 && A_TickCount - clLook > 10000) {
+            clLook := A_TickCount
+            w := SC_Where()
+            if (w = "match" || w = "vote" || w = "loading") {
+                AddToLog("[Where am I] Waiting for the lobby but this is a match (" w ") - playing it")
+                return NextStep(RestartStage)
+            }
         }
         Reconnect()
     }
@@ -1115,18 +1126,33 @@ SC_Where() {
         return "match"
     t := ""
     try t := SH_Text(0, 0, 800, 600)
+    ; [Where am I v2] the two screens look clearly different:
+    ;  lobby: side buttons Store / Items / Trade / Summon / Servers, "UPD 21.0.0", Quests / Areas / Guild
+    ;  match: only the Units button, a wave counter, yen under the hotbar, the "Level info" panel
+    lob := 0, game := 0
+    for w in ["store", "summon", "servers", "trade", "quests", "areas", "guild", "upd 2"]
+        if InStr(t, w)
+            lob += 1
+    for re in ["wave\s*\d", "level info", "enemies remaining", "\d\s*¥", "level modifiers"]
+        if RegExMatch(t, re)
+            game += 1
     if RegExMatch(t, "travelling to")
         return "loading"
     if RegExMatch(t, "pick your own path|dungeon run|dungeon depth")
         return "dungeon_menu"
-    if RegExMatch(t, "waves completed|total time|return to lobby|victory|defeat")
+    ; [Fix] "Return to Lobby" alone is also in the in-match Settings menu - only an end screen has these
+    if RegExMatch(t, "waves completed|total time|victory|defeat") || (InStr(t, "return to lobby") && RegExMatch(t, "replay|next"))
         return "end"
-    if RegExMatch(t, "starts in|vote start|change your units")
-        return "vote"
-    ; [Fix] still in the lobby but the matchmaking queue is running ("Finding a game...") - that's not a
-    ; failure, the match is coming. Restarting here walked around the lobby while the game teleported us in.
+    ; still in the lobby but the matchmaking queue is running ("Finding a game...") - not a failure, the
+    ; match is coming. Restarting here walked around the lobby while the game teleported us in.
     if RegExMatch(t, "finding a game|matchmaking started|in queue|leave queue|teleporting|game will begin")
         return "queue"
+    if (lob >= 3 && game = 0)
+        return "lobby"
+    if RegExMatch(t, "starts in|vote start|change your units")
+        return "vote"
+    if (game >= 2 && lob <= 1)
+        return "match"
     if RegExMatch(t, "upd \d|daily rewards|public server|areas")
         return "lobby"
     return ""

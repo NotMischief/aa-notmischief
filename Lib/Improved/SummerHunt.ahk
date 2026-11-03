@@ -411,7 +411,7 @@ SH_ReadBoard() {
     for it in items {
         if InStr(it.t, "summer event") {
             ay := it.y, ax := it.x
-            rest := Trim(RegExReplace(it.t, ".*summer event", ""))   ; both lines read as one
+            rest := Trim(RegExReplace(RegExReplace(it.t, ".*summer event", ""), "\s*[\(\[{].*$", ""))   ; both lines read as one
             if (StrLen(rest) >= 4 && (m := SH_CanonMap(rest, true)) != "")
                 return SH_SetBoard(m, items)
         }
@@ -421,7 +421,7 @@ SH_ReadBoard() {
     best := "", bestY := 9999
     for it in items {
         if (it.y > ay + 3 && it.y < ay + 60 && Abs(it.x - ax) < 200 && it.y < bestY) {
-            t := Trim(RegExReplace(it.t, "\(summer\)|summer hunt.*", ""))
+            t := Trim(RegExReplace(it.t, "\s*[\(\[{].*$|summer hunt.*", ""))   ; [Fix] "puppet island (summe" - drop a cut-off "(Summer)" too
             if (StrLen(t) >= 4 && (m := SH_CanonMap(t, true)) != "")
                 best := m, bestY := it.y
         }
@@ -432,7 +432,7 @@ SH_ReadBoard() {
     ; read just that strip again, zoomed in 2x - one small extra read while the board is in view
     zx := Max(0, ax - 160), zy := ay + 6
     for it in SH_Rows(SH_Items(zx, zy, 320, 40, 2)) {
-        t := Trim(RegExReplace(it.t, "\(summer\)|summer hunt.*", ""))
+        t := Trim(RegExReplace(it.t, "\s*[\(\[{].*$|summer hunt.*", ""))   ; [Fix] "puppet island (summe" - drop a cut-off "(Summer)" too
         if (StrLen(t) >= 4 && (m := SH_CanonMap(t, true)) != "")
             return SH_SetBoard(m, items)
     }
@@ -641,7 +641,7 @@ SH_BannerOnce(scale := 1) {
             gap := a.y - it.y
             if (gap < 6 || gap > 90)
                 continue
-            t := Trim(RegExReplace(it.t, "\(summer\)|summer hunt.*|weather:.*", ""))
+            t := Trim(RegExReplace(it.t, "\s*[\(\[{].*$|summer hunt.*|weather:.*", ""))
             if (StrLen(t) < 4 || InStr(t, "["))
                 continue
             m := SH_CanonMap(t, true)   ; only (nearly) one of the Summer map names counts
@@ -1065,6 +1065,22 @@ SH_Mini(mode, name := "") {
     r := VH_Call(Format("cmd=mini`nmode={}`nname={}`nx={}`ny={}", mode, name, ox, oy), 3000)
     return r ? r : Map()
 }
+; [Fix 2 Nov] the loading screen's "Planet Greenie" was taken as the map name for a while, and the
+; minimap shape / view of the real map got saved as Planet Greenie. Put those aside once.
+SH_FixPlanetGreenieOnce() {
+    mark := A_ScriptDir "\Settings\fix_pg_1102.txt"
+    if FileExist(mark)
+        return
+    for dir in ["MiniMaps", "MapPrints"] {
+        f := A_ScriptDir "\Settings\" dir "\Planet Greenie.png"
+        try {
+            if (FileExist(f) && SubStr(FileGetTime(f, "M"), 1, 8) = "20261102")
+                FileMove(f, f ".bad_1102", 1)
+        }
+    }
+    try FileAppend("done", mark, "UTF-8")
+}
+
 SH_MiniLearn(mapName) {
     if (mapName = "" || mapName = "no map found")
         return

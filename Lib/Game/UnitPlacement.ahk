@@ -1,4 +1,5 @@
-﻿#Requires AutoHotkey v2.0
+﻿global PL_HoverSkipped := false  ; top - [Fix] set when the hover check refused a spot
+#Requires AutoHotkey v2.0
 
 ; ============================================================================
 ;  UnitPlacement.ahk  -  Unit placement during a stage.
@@ -105,6 +106,13 @@ PlacingUnits() {
                     } else {
                         if SH_HandleCardsBeforePlacing() {   ; [Summer] the cards popped up over the spot - not a bad spot
                             retrySpot := spot
+                            continue
+                        }
+                        global PL_HoverSkipped
+                        if PL_HoverSkipped {   ; [Fix] the hover check saw something under the unit (often another
+                            PL_HoverSkipped := false   ; player's unit) - try another spot now, don't wait for "money" there
+                            misses += 1, waits := 0
+                            badSpots.Push(spot), retrySpot := ""
                             continue
                         }
                         msg := PL_GameMessage()
@@ -547,6 +555,8 @@ PlaceUnit(x, y, slot := 1) {
         PL_Log("Unit " slot ": hotbar says " c0[1] "/" c0[2] " - already at its limit")
         return false
     }
+    global PL_HoverSkipped
+    PL_HoverSkipped := false
     hv := PL_Hover(x, y)        ; [Hover check] measure what the game draws under the held unit
     ; [Safety] the hover rule was tuned on Summer maps; on Sand Village (orange sand) it called almost every
     ; spot blocked and the unit never went down. After 2 skips in a row it's not trusted on this map for
@@ -560,6 +570,7 @@ PlaceUnit(x, y, slot := 1) {
         } else {
             SendInput("q")
             PL_Log("Unit " slot ": spot " x ", " y " looks blocked under the unit (" PL_HoverText(hv) ") - not clicking")
+            PL_HoverSkipped := true
             return false
         }
     }

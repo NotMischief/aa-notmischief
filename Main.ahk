@@ -70,6 +70,7 @@ DM_Init()   ; [Design mode] (before the Roblox check, which waits for Roblox)
 GetScreenInfoStartUp()
 AU_Start()   ; [Auto update] check GitHub for a newer version (Settings\AutoUpdate.txt: Auto/Ask/Off) - before WM_Init
 WM_Init()   ; [Watch mode]
+try SH_FixPlanetGreenieOnce()   ; [Fix] wrongly saved "Planet Greenie" minimap/view from 2 Nov
 VH_Start()   ; [Python vision] start the helper (falls back silently if Python is missing)
 
 ;DEBUG SECTIOn

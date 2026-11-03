@@ -651,10 +651,11 @@ HandleStageEnd() {
 
     ; [Damage list] make sure the player / damage list is really open for the webhook picture
     ; (Tab toggles it - pressing it blindly closed it again when it was already open)
-    if (mode = "Summer Hunt")
+    if (mode = "Summer Hunt") {
         try DG_ShowList()
-    else
+    } else {
         SendInput("{Tab}") ; Open Player leaderboard
+    }
     try {   ; [Framework] a webhook failure must not end the run (Anime Guardians pattern)
         SendWebhookWithTime(isWin, stageLength)
     } catch Error as err {
@@ -662,10 +663,11 @@ HandleStageEnd() {
             throw err
         AddToLog("Webhook error: " err.Message " - continuing")
     }
-    if (mode = "Summer Hunt")
+    if (mode = "Summer Hunt") {
         try DG_HideList()
-    else
+    } else {
         SendInput("{Tab}") ; Close Player leaderboard
+    }
     Sleep (500)
 
     if (mode = "Portal") {

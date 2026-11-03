@@ -46,9 +46,39 @@ class StageGuard {
         }
         kept.Push(now)
         this.triggers := kept
-        if (FW_MaxFailsafesPerHour > 0 && kept.Length > FW_MaxFailsafesPerHour)
-            throw MacroStop(kept.Length " failsafes within one hour (last: " name ") - stopping instead of rejoining again")
+        if (FW_MaxFailsafesPerHour > 0 && kept.Length > FW_MaxFailsafesPerHour) {
+            ; [24/7] used to stop the macro for good. Now: say so, rest 10 minutes, then rejoin and carry on.
+            FW_Log("[Failsafe] " kept.Length " failsafes within one hour (last: " name ") - resting 10 minutes, then rejoining")
+            try sendDCWebhook()
+            this.triggers := []
+            Sleep(600000)
+        }
     }
+}
+
+; [Failsafe] a step finished without saying what comes next. Lobby -> start the mode again; anything
+; else -> rejoin. At most 6 times in 30 minutes, then stop (something is really wrong).
+FW_StepEnded() {
+    static ends := []
+    now := A_TickCount
+    kept := []
+    for t in ends
+        if (now - t < 1800000)
+            kept.Push(t)
+    kept.Push(now)
+    ends := kept
+    if (kept.Length > 6) {
+        FW_Log("[Framework] Macro stopped: it got lost " kept.Length " times in 30 minutes")
+        return 0
+    }
+    w := ""
+    try w := SC_Where()
+    if (w = "lobby" || w = "queue") {
+        FW_Log("[Failsafe] Lost track of what to do - this is the lobby, starting again")
+        return StartSelectedMode
+    }
+    FW_Log("[Failsafe] Lost track of what to do (screen: " (w = "" ? "unknown" : w) ") - rejoining")
+    return RejoinPrivateServer
 }
 
 ; Called once by RunMacroLoop when a run starts.

@@ -38,7 +38,12 @@ RunMacroLoop(step) {
     try {
         loop {
             try {
-                return step()   ; a step that just ends (nothing to hand off to) stops the macro, like before
+                step()
+                ; [Failsafe] a step ended without handing off - the macro used to just stop here (no more
+                ; matches, no webhooks). Look at the screen instead: lobby -> start again, else rejoin.
+                step := FW_StepEnded()
+                if !step
+                    return
             } catch MacroNextStep as handoff {
                 step := handoff.Step
             } catch MacroStop as stop {

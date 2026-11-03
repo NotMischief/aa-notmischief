@@ -1088,11 +1088,11 @@ SH_Mini(mode, name := "") {
 ; [Fix 2 Nov] the loading screen's "Planet Greenie" was taken as the map name for a while, and the
 ; minimap shape / view of the real map got saved as Planet Greenie. Put those aside once.
 SH_FixPlanetGreenieOnce() {
-    mark := A_ScriptDir "\Settings\fix_pg_1102.txt"
+    mark := A_ScriptDir "\Settings\fix_pg_1102b.txt"
     if FileExist(mark)
         return
-    for dir in ["MiniMaps", "MapPrints"] {
-        f := A_ScriptDir "\Settings\" dir "\Planet Greenie.png"
+    for rel in ["MiniMaps\Planet Greenie.png", "MapPrints\Planet Greenie.png", "GoodSpots\Planet Greenie.txt", "PlacementMemory\Planet_Greenie.png"] {
+        f := A_ScriptDir "\Settings\" rel
         try {
             if (FileExist(f) && SubStr(FileGetTime(f, "M"), 1, 8) = "20261102")
                 FileMove(f, f ".bad_1102", 1)

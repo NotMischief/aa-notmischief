@@ -5,7 +5,8 @@
 ;  - last of 3+ players: every placed unit gets upgraded (not only the ticked ones) to catch up
 ;  - still last AND below MinDamage at wave LeaveWave or later (before LeaveBefore): leave to the lobby
 ;    (if everyone's damage is high, yours included, being last is fine - it stays)
-;  - had to leave DungeonAfter matches in a row: Dungeon until the Summer map changes (0 = never)
+;  - had to leave DungeonAfter matches in a row: Dungeon until the Summer map changes (0 = never) -
+;    only when "Dungeon on unknown maps" is ticked; unticked = it never goes to Dungeon
 ; Settings\DamageGuard.txt (one per line):
 ;   On=1  Name=<your name in the list>  MinDamage=50M  LeaveWave=47  LeaveBefore=50  DungeonAfter=2
 
@@ -169,7 +170,10 @@ DG_MatchEnd() {
         s.bad := 0
     s.behind := false, s.matchBehind := false, s.wave := 0, s.last := 0
     after := Integer(DG_Cfg("DungeonAfter", "2"))
-    if (after > 0 && s.bad >= after) {
+    if (after > 0 && s.bad >= after && !SH_FallbackOn()) {   ; Dungeon box unticked: never switch to Dungeon
+        s.bad := 0
+        SH_Log("damage: left " after " matches in a row - Dungeon box is unticked, so staying on Summer Hunt")
+    } else if (after > 0 && s.bad >= after) {
         s.bad := 0
         global SH_FallbackUntil
         next := DateAdd(FormatTime(, "yyyyMMddHH") "0000", 1, "Hours")

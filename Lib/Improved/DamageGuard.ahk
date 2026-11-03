@@ -1,10 +1,13 @@
-﻿; [Damage guard] keeps you from being the lowest-damage player in Summer Hunt matchmaking (a protection
-; against matchmaking bans). Every minute from wave 20 on it opens the player list (Tab: "People / Total
-; Damage", highest first), reads everyone's damage and the wave counter, and closes it again.
-;  - behind = last of 3+ players, or below MinDamage once the wave reaches AtWave
-;  - while behind: every placed unit gets upgraded (not only the ticked ones) to raise damage
-;  - behind at the end of 2 matches in a row: Dungeon until the Summer map changes (no early leaving)
-; Settings\DamageGuard.txt (one per line):  On=1   Name=<your name in the list>   MinDamage=50M   AtWave=47
+﻿; [Damage guard] never FINISH a Summer Hunt matchmaking game (win or lose) as the lowest-damage player -
+; that is what can get you matchmaking banned. Leaving shortly before the end keeps the rewards.
+; From wave 20 it opens the player list (Tab: "People / Total Damage", highest first) once a minute -
+; every 15 s from wave 44 - reads everyone's damage and the wave counter, and closes it again.
+;  - last of 3+ players: every placed unit gets upgraded (not only the ticked ones) to catch up
+;  - still last AND below MinDamage at wave LeaveWave or later (before LeaveBefore): leave to the lobby
+;    (if everyone's damage is high, yours included, being last is fine - it stays)
+;  - had to leave DungeonAfter matches in a row: Dungeon until the Summer map changes (0 = never)
+; Settings\DamageGuard.txt (one per line):
+;   On=1  Name=<your name in the list>  MinDamage=50M  LeaveWave=47  LeaveBefore=50  DungeonAfter=2
 
 DG_S() {
     static s := {last: 0, behind: false, matchBehind: false, bad: 0, wave: 0}
@@ -83,7 +86,7 @@ DG_Tick() {
     if (!SH_On() || !DG_On())
         return
     s := DG_S()
-    if (A_TickCount - s.last < 60000)
+    if (A_TickCount - s.last < (s.wave >= 44 ? 15000 : 60000))   ; check often close to the end
         return
     s.last := A_TickCount
     try {
@@ -130,17 +133,25 @@ DG_Tick() {
         SH_Log("damage: didn't find '" me "' in the list")
         return
     }
-    minDmg := DG_Num(DG_Cfg("MinDamage", "50M")), atWave := Integer(DG_Cfg("AtWave", "47"))
+    minDmg := DG_Num(DG_Cfg("MinDamage", "50M"))
+    leaveWave := Integer(DG_Cfg("LeaveWave", DG_Cfg("AtWave", "47"))), before := Integer(DG_Cfg("LeaveBefore", "50"))
     last := (n >= 3 && myRank = n)
-    low := (s.wave >= atWave && minDmg > 0 && myDmg < minDmg)
     was := s.behind
-    s.behind := last || low
-    s.matchBehind := s.behind
+    s.behind := last
     if (s.behind && !was)
-        AddToLog("[Damage guard] You're " (last ? "last in damage (" myRank "/" n ")" : "below " DG_Fmt(minDmg))
-            . " at wave " s.wave " (" DG_Fmt(myDmg) ") - upgrading every unit to catch up")
+        AddToLog("[Damage guard] Last in damage (" myRank "/" n ", " DG_Fmt(myDmg) ") at wave " s.wave " - upgrading every unit to catch up")
     else if (!s.behind && was)
         AddToLog("[Damage guard] Caught up - " myRank "/" n " with " DG_Fmt(myDmg))
+    ; close to the end and still the lowest with low damage: leave before the game ends
+    if (last && myDmg < minDmg && s.wave >= leaveWave && s.wave < before) {
+        AddToLog("[Damage guard] Still last at wave " s.wave " with " DG_Fmt(myDmg) " (under " DG_Fmt(minDmg)
+            . ") - leaving before the end so it doesn't count against you")
+        SH_Log("damage: leaving at wave " s.wave " (last, " DG_Fmt(myDmg) ")")
+        s.matchBehind := true
+        DG_MatchEnd()
+        return "leave"
+    }
+    return ""
 }
 
 ; true while behind: the upgrader then upgrades every placed unit, not only the ticked ones
@@ -157,13 +168,14 @@ DG_MatchEnd() {
     } else
         s.bad := 0
     s.behind := false, s.matchBehind := false, s.wave := 0, s.last := 0
-    if (s.bad >= 2) {
+    after := Integer(DG_Cfg("DungeonAfter", "2"))
+    if (after > 0 && s.bad >= after) {
         s.bad := 0
         global SH_FallbackUntil
         next := DateAdd(FormatTime(, "yyyyMMddHH") "0000", 1, "Hours")
         SH_FallbackUntil := next
         SH_SaveUntil(next)
-        AddToLog("[Damage guard] Lowest damage 2 matches in a row - playing Dungeon until " FormatTime(next, "HH:mm") " to stay safe")
+        AddToLog("[Damage guard] Had to leave " after " matches in a row - playing Dungeon until " FormatTime(next, "HH:mm") " to stay safe")
         SH_Log("damage: 2 bad matches -> Dungeon until " FormatTime(next, "HH:mm"))
     }
 }

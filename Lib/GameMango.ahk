@@ -555,8 +555,12 @@ global mode, StoryActDropdown
         if (mode = "Fool's Hunt" || mode = "Summer Hunt") { ; [Fixed] was "Fools Event", which never matched
             CheckForCardSelection()
         }
-        if (mode = "Summer Hunt")
-            try DG_Tick()   ; [Damage guard] once a minute: check you're not the lowest damage
+        if (mode = "Summer Hunt") {   ; [Damage guard] check you're not the lowest damage; leave before the end if so
+            dg := ""
+            try dg := DG_Tick()
+            if (dg = "leave")
+                return TpLobby()
+        }
 
 
         CheckForMahoraga()

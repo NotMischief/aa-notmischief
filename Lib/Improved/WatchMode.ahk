@@ -1,5 +1,5 @@
-; [Watch mode] F9 on/off. While on:
-;  - saves a picture of the Roblox window every 4 s (Logs\Watch\latest.jpg + a rolling history)
+﻿; [Watch mode] F9 on/off. While on:
+;  - saves a picture of the Roblox window every 10 s (Logs\Watch\latest.jpg + a rolling history)
 ;    and on important log lines, plus Logs\Watch\status.txt, so Claude can follow the game.
 ;  - when the macro's files have been changed, it reloads itself in the lobby (between matches)
 ;    and starts again with the same mode, so fixes go in without cutting off a round.
@@ -43,7 +43,7 @@ WM_Init() {
     s := WM_S()
     s.baseline := WM_CodeStamp()
     DirCreate(WM_Dir())
-    SetTimer(WM_Tick, 4000)
+    SetTimer(WM_Tick, 10000)   ; [Lag] was 4 s - each picture briefly pauses the macro
     rf := A_ScriptDir "\Settings\WatchResume.txt"
     if FileExist(rf) {
         fresh := DateDiff(A_Now, FileGetTime(rf, "M"), "Seconds") < 300
@@ -78,7 +78,7 @@ WM_OnLog(msg) {
     if !WM_On()
         return
     s := WM_S()
-    if (A_TickCount - s.lastEvt < 1500)
+    if (A_TickCount - s.lastEvt < 5000)   ; [Lag] at most one event picture per 5 s
         return
     if RegExMatch(msg, "i)victory|defeat|placed|placement|upgrade|hotbar|wrong units|error|failed|couldn't|could not|stuck|leav|smart|python|money")
         s.lastEvt := A_TickCount, SetTimer(() => WM_Snap("evt"), -10)
@@ -97,11 +97,11 @@ WM_Snap(tag) {
         pBmp := Gdip_BitmapFromScreen(x "|" y "|" w "|" h)
         Gdip_SaveBitmapToFile(pBmp, WM_Dir() "\latest.jpg")   ; default quality - other values crash this Gdip version
         name := FormatTime(, "MMdd_HHmmss") (tag != "" ? "_" tag : "") ".jpg"
-        if (tag != "" || Mod(s.n, 2) = 0)   ; history: every 8 s + every event
+        if (tag != "" || Mod(s.n, 3) = 0)   ; history: every 30 s + every event
             Gdip_SaveBitmapToFile(pBmp, WM_Dir() "\" name)
         Gdip_DisposeImage(pBmp)
         Gdip_Shutdown(tok)
-        if (Mod(s.n, 25) = 0)
+        if (Mod(s.n, 10) = 0)
             WM_Trim()
     } catch as e {
         try FileAppend(FormatTime(, "HH:mm:ss") " snap failed: " e.Message " (" e.What " line " e.Line ")`n", WM_Dir() "\debug.txt")

@@ -655,8 +655,11 @@ def main() -> None:
     with open(os.path.join(IPC, "ready.txt"), "w", encoding="utf-8") as fh:
         fh.write(str(os.getpid()))
     last_check = 0.0
+    last_req = time.time()
     while True:
         names = [n for n in os.listdir(IPC) if n.startswith("req_") and n.endswith(".txt")]
+        if names:
+            last_req = time.time()
         for n in names:
             rid = n[4:-4]
             path = os.path.join(IPC, n)
@@ -684,7 +687,9 @@ def main() -> None:
             if not parent_alive():
                 log("macro closed - helper exiting")
                 return
-        time.sleep(0.01 if names else 0.02)
+        # [Lag] look for new requests often while the macro is busy, much less often when it's idle
+        idle = time.time() - last_req
+        time.sleep(0.01 if names else (0.02 if idle < 3 else 0.06))
 
 
 if __name__ == "__main__":

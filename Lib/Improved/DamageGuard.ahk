@@ -60,20 +60,27 @@ DG_ReadBoard() {
     items := SH_Items(555, 70, 240, 300, 1.5)
     names := [], vals := []
     for it in items {
-        if RegExMatch(it.t, "people|total|damage|level|enemies|weather|modifier|boost|reward")
+        ; [Fix] the "Level info" panel behind the list shows through ("+25%", "Units/Skins +10%", "Secret
+        ; Portal Rate") - those are not players
+        if RegExMatch(it.t, "people|total|damage|level|enemies|weather|modifier|boost|reward|portal|units|skins|%|\+")
             continue
         if (it.x >= 715 && DG_Num(it.t) >= 0)
             vals.Push(it)
-        else if (it.x < 715 && StrLen(it.t) >= 2)
+        else if (it.x >= 575 && it.x < 715 && StrLen(it.t) >= 2)   ; player names sit in the left part of the list
             names.Push(it)
     }
-    for nm in names {
-        best := 0
-        for v in vals
-            if (Abs(v.y - nm.y) <= 12)
-                best := v
-        if best
-            rows.Push({name: nm.t, dmg: DG_Num(best.t), y: nm.y})
+    ; one player per row: each damage number takes the name on its line that sits furthest left (the
+    ; player name column; see-through panel text sits further right), each name used once
+    used := Map()
+    for v in vals {
+        best := 0, bestX := 9999
+        for i, nm in names
+            if (!used.Has(i) && Abs(v.y - nm.y) <= 12 && nm.x < bestX)
+                best := i, bestX := nm.x
+        if best {
+            used[best] := 1
+            rows.Push({name: names[best].t, dmg: DG_Num(v.t), y: names[best].y})
+        }
     }
     SendInput("{Tab}")           ; close it again
     Sleep(300)
@@ -95,8 +102,9 @@ DG_Tick() {
             return
     }
     wave := DG_Wave()
-    if (wave > 0)
-        s.wave := wave
+    if (wave <= 0)        ; no wave counter on screen (lobby, end screen) - nothing to check
+        return
+    s.wave := wave
     if (s.wave < 20)
         return
     me := StrLower(DG_Cfg("Name", ""))

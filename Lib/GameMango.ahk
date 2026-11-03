@@ -1123,6 +1123,10 @@ SC_Where() {
         return "end"
     if RegExMatch(t, "starts in|vote start|change your units")
         return "vote"
+    ; [Fix] still in the lobby but the matchmaking queue is running ("Finding a game...") - that's not a
+    ; failure, the match is coming. Restarting here walked around the lobby while the game teleported us in.
+    if RegExMatch(t, "finding a game|matchmaking started|in queue|leave queue|teleporting|game will begin")
+        return "queue"
     if RegExMatch(t, "upd \d|daily rewards|public server|areas")
         return "lobby"
     return ""

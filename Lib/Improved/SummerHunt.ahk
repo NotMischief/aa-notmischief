@@ -653,6 +653,26 @@ SH_BannerOnce(scale := 1) {
                 best := m, bestGap := gap
         }
     }
+    if (best = "" && scale < 2) {
+        ; [Stronger] the anchor ("Summer Hunt" / "Weather") was seen but the big map line above it wasn't
+        ; read whole (the banner font is fancy): read just that strip again, zoomed in 2x
+        for a in items {
+            if (!RegExMatch(a.t, "summer hunt|weather:") || a.y < 75 || InStr(a.t, "greenie"))
+                continue
+            if (a.x < 150 || a.x > 650)   ; the banner is in the middle (the side panel's "Weather:" isn't)
+                continue
+            zx := Max(0, a.x - 220), zy := Max(40, a.y - 80)
+            for it in SH_Rows(SH_Items(zx, zy, 440, a.y - zy - 4, 2)) {
+                t := Trim(RegExReplace(it.t, "\s*[\(\[{].*$|summer hunt.*|weather:.*", ""))
+                m := (StrLen(t) >= 4) ? SH_CanonMap(t, true) : ""
+                if (m = "Planet Greenie" && SH_BoardNow() != "Planet Greenie")
+                    continue
+                if (m != "")
+                    return m
+            }
+            break
+        }
+    }
     return best
 }
 

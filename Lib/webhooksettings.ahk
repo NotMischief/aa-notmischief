@@ -189,7 +189,7 @@ SendWebhookWithTime(isWin, stageLength) {
     . ":scales: Win Rate: " Format("{:.1f}%", (Wins/(Wins+loss))*100) "`n"
     isWin ? 0x0AB02D : 0xB00A0A,
     isWin ? "win" : "lose"
-    
+    try sessionData .= DG_WebhookText()   ; [Damage list] everyone's damage from the last reading (Summer)
     
     ; Send webhook
     WebhookScreenshot(

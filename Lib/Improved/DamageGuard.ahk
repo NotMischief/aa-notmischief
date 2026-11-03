@@ -11,7 +11,7 @@
 ;   On=1  Name=<your name in the list>  MinDamage=50M  LeaveWave=47  LeaveBefore=50  DungeonAfter=2
 
 DG_S() {
-    static s := {last: 0, behind: false, matchBehind: false, bad: 0, wave: 0}
+    static s := {last: 0, behind: false, matchBehind: false, bad: 0, wave: 0, board: "", boardAt: 0}
     return s
 }
 
@@ -145,6 +145,11 @@ DG_Tick() {
     for r in sorted
         line .= r.name " " DG_Fmt(r.dmg) ", "
     SH_Log("damage: wave " s.wave " - " RTrim(line, ", "))
+    ; keep this reading for the end-of-match webhook
+    brd := ""
+    for i, r in sorted
+        brd .= i ". " (i = myRank0(sorted, me) ? "**" r.name "**" : r.name) " - " DG_Fmt(r.dmg) "`n"
+    s.board := "📊 Damage at wave " s.wave ":`n" brd, s.boardAt := A_TickCount
     if (!myRank) {
         SH_Log("damage: didn't find '" me "' in the list")
         return
@@ -168,6 +173,37 @@ DG_Tick() {
         return "leave"
     }
     return ""
+}
+
+myRank0(sorted, me) {
+    for i, r in sorted
+        if (SH_Lev(StrLower(r.name), me) <= Max(1, StrLen(me) // 4))
+            return i
+    return 0
+}
+
+; text for the end-of-match webhook: everyone's damage from the last reading (within 5 minutes)
+DG_WebhookText() {
+    s := DG_S()
+    if (s.board = "" || A_TickCount - s.boardAt > 300000)
+        return ""
+    return s.board
+}
+
+; open / close the player (damage) list for the webhook picture
+DG_ShowList() {
+    if DG_ListOpen()
+        return
+    SendInput("{Tab}")
+    Sleep(500)
+}
+DG_HideList() {
+    if !DG_ListOpen()
+        return
+    SendInput("{Tab}")
+    Sleep(300)
+    if DG_ListOpen()
+        FixClick(564, 72)
 }
 
 ; true while behind: the upgrader then upgrades every placed unit, not only the ticked ones

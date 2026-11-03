@@ -649,7 +649,12 @@ HandleStageEnd() {
     }
     try DG_MatchEnd()   ; [Damage guard] lowest damage 2 matches in a row -> Dungeon for the rest of the hour
 
-    SendInput("{Tab}") ; Open Player leaderboard
+    ; [Damage list] make sure the player / damage list is really open for the webhook picture
+    ; (Tab toggles it - pressing it blindly closed it again when it was already open)
+    if (mode = "Summer Hunt")
+        try DG_ShowList()
+    else
+        SendInput("{Tab}") ; Open Player leaderboard
     try {   ; [Framework] a webhook failure must not end the run (Anime Guardians pattern)
         SendWebhookWithTime(isWin, stageLength)
     } catch Error as err {
@@ -657,7 +662,10 @@ HandleStageEnd() {
             throw err
         AddToLog("Webhook error: " err.Message " - continuing")
     }
-    SendInput("{Tab}") ; Open Player leaderboard
+    if (mode = "Summer Hunt")
+        try DG_HideList()
+    else
+        SendInput("{Tab}") ; Close Player leaderboard
     Sleep (500)
 
     if (mode = "Portal") {

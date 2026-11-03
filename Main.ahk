@@ -67,8 +67,8 @@ SetWorkingDir(A_ScriptDir)   ; [Fix] files like Settings\WebhookURL.txt are open
 
 DM_Init()   ; [Design mode] (before the Roblox check, which waits for Roblox)
 GetScreenInfoStartUp()
+AU_Start()   ; [Auto update] check GitHub for a newer version (Settings\AutoUpdate.txt: Auto/Ask/Off) - before WM_Init
 WM_Init()   ; [Watch mode]
-AU_Start()   ; [Auto update] check GitHub for a newer version (Settings\AutoUpdate.txt: Ask/Auto/Off)
 VH_Start()   ; [Python vision] start the helper (falls back silently if Python is missing)
 
 ;DEBUG SECTIOn

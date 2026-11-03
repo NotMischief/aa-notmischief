@@ -150,6 +150,7 @@ WM_LobbyReload() => WM_ReloadAt("lobby")
 WM_ReloadAt(step) {
     if !WM_On()
         return
+    try AU_LobbyCheck()   ; [Auto update] new code from GitHub (Auto mode, every 15 min) - reloaded just below
     if (WM_CodeStamp() <= WM_S().baseline)
         return
     out := "step=" step "`n"

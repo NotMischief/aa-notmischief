@@ -630,7 +630,7 @@ SH_BannerOnce(scale := 1) {
     for r in SH_Rows(items.Clone())   ; also try the words of one line joined ("Assassin" + "Park")
         items.Push(r)
     for it in items
-        if InStr(it.t, "travelling")      ; the loading screen's text names the wrong map sometimes
+        if RegExMatch(it.t, "trav[e3]l|travel+ing|to\.\.\.")   ; the loading screen ("Travelling to...") names the wrong map
             return ""
     best := "", bestGap := 999
     for a in items {
@@ -646,6 +646,10 @@ SH_BannerOnce(scale := 1) {
             if (StrLen(t) < 4 || InStr(t, "["))
                 continue
             m := SH_CanonMap(t, true)   ; only (nearly) one of the Summer map names counts
+            ; [Fix] the LOADING screen always says "Planet Greenie (Summer)" whatever the map is, so a
+            ; banner reading of Planet Greenie is only believed when the lobby board said so too
+            if (m = "Planet Greenie" && SH_BoardNow() != "Planet Greenie")
+                continue
             if (m != "" && gap < bestGap)
                 best := m, bestGap := gap
         }

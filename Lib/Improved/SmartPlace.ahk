@@ -454,6 +454,10 @@ PL_HoverSkip(hv) {
     ; now the spot right under the unit must also be red: skip when that disc is clearly red (>= 0.5 -
     ; no placed try ever had more than 0.43), or partly red (>= 0.2) with a red, blue-less ring.
     dr := Float(hv["dred"]), rb := Float(hv["blue"]), rr := Float(hv["red"])
-    return (dr >= 0.5) || (dr >= 0.2 && rb < 0.10 && rr >= 0.13)
+    db := hv.Has("dblue") ? Float(hv["dblue"]) : 1
+    ; [Retuned 11-03 on 655 real tries from the 24/7 PC: 175 placed, 480 failed] the old rule only caught
+    ; 13 of the 480 failed tries. A usable spot almost always shows SOME blue (range ring / preview):
+    ; no blue at all on the ring AND under the unit -> skip. Kept 173/175 placed, skips 77 more failed.
+    return (dr >= 0.5) || (dr >= 0.2 && rb < 0.10 && rr >= 0.13) || (rb < 0.08 && db < 0.08)
 }
 

@@ -1073,14 +1073,23 @@ CheckForXp(closeLeaderboard := false) {
 CheckLobby() {
     StageGuard.Disarm("Stage")   ; [Framework] stage is over - its timeout no longer applies
     StageGuard.Arm("Lobby", FW_LobbyTimeoutMs)   ; [Framework]
-    clStart := A_TickCount, clLook := 0
+    clStart := A_TickCount, clLook := 0, clLobby := 0
     loop {
         Sleep 1000
         StageGuard.Check("Lobby", "lobby not reached")   ; [Framework]
         if (ok := FT(&X, &Y, 746, 514, 789, 530, 0, 0, AreaText)) {
             break
         }
-        if (CheckForEndGameScreens()) {
+        ; [Faster] the old lobby picture rarely matches since the update, so after every match it waited
+        ; ~45 s for the "where am I" check. The lobby's own buttons (Store / Summon / Servers...) say it sooner.
+        if (A_TickCount - clStart > 4000 && A_TickCount - clLobby > 3000) {
+            clLobby := A_TickCount
+            if (SC_Where() = "lobby")
+                break
+        }
+        ; the end screen stays up for a few seconds while the teleport to the lobby happens - only
+        ; call it "should have returned already" after that
+        if (A_TickCount - clStart > 12000 && CheckForEndGameScreens()) {
             return NextStep(MonitorStage)
         }
         ; [Where am I] waiting for the lobby, but we're actually in a match (or it's loading/voting) -

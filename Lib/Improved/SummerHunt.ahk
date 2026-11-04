@@ -127,6 +127,35 @@ SH_VoteVisible() {
 ; [Cards, fast] the card panel by pixels only (instant, no OCR): the three card bodies are dark and the
 ; white "Vote ends in: Ns" text sits under the middle. Tested on 8 card pictures (cards and weather
 ; cards) and ~90 other pictures (lobby, loading, waves, dungeon) - no misses, no false alarms.
+; the green Vote button under the cards: by its text, else by its green colour. {x, y, found}
+SH_VoteBtn() {
+    vb := 0
+    try vb := SH_Find("^vote!?$|^vote\W", 200, 450, 400, 90)
+    if vb
+        return {x: vb.x, y: vb.y, found: true}
+    old := A_CoordModePixel
+    CoordMode("Pixel", "Client")
+    sx := 0, sy := 0, n := 0
+    try {
+        y := 478
+        while (y <= 508) {          ; stay above the hotbar (y 512+), whose card frames can be green too
+            x := 260
+            while (x <= 560) {
+                c := PixelGetColor(x, y)
+                r := (c >> 16) & 255, g := (c >> 8) & 255, b := c & 255
+                if (g >= 160 && r < 120 && b < 120)
+                    sx += x, sy += y, n += 1
+                x += 10
+            }
+            y += 5
+        }
+    }
+    CoordMode("Pixel", old)
+    if (n >= 6)
+        return {x: Round(sx / n), y: Round(sy / n), found: true}
+    return {x: 340, y: 496, found: false}
+}
+
 SH_CardsUp() {
     old := A_CoordModePixel
     CoordMode("Pixel", "Client")
@@ -200,22 +229,28 @@ SH_Cards(force := false) {
     ; [Fix] select the card, press Vote, then CHECK it counted (the Vote button goes away / the count under
     ; our card goes up) - before, a press that landed while the button was still sliding in was never retried
     confirmed := false
-    loop 3 {
+    loop 4 {
         FixClick(xs[best] + 84, 300)          ; select the card
         Sleep(450)
-        vb := SH_Find("^vote$", 200, 450, 400, 90)
-        FixClick(vb ? vb.x : 340, vb ? vb.y : 496)   ; and press the green Vote button
-        Sleep(600)
+        vb := SH_VoteBtn()
+        FixClick(vb.x, vb.y)                  ; and press the green Vote button
+        Sleep(700)
         if !SH_CardsUp() {                    ; vote over / panel closed
             confirmed := true
             break
         }
         v2 := SH_Text(xs[best] + 50, 408, 70, 32)
         nowVotes := RegExMatch(v2, "\d+", &m2) ? Integer(m2[0]) : 0
-        stillBtn := SH_Find("^vote$", 200, 450, 400, 90)
-        if (nowVotes > votes[best] || !stillBtn) {
+        ; [Fix] "the button is gone" only proves something if we actually SAW the button before - when it
+        ; was never found, a missed press was counted as a vote and never retried
+        after := SH_VoteBtn()
+        if (nowVotes > votes[best] || (vb.found && !after.found)) {
             confirmed := true
             break
+        }
+        if (A_Index = 2) {                    ; second miss: also click a bit lower (the button's middle)
+            FixClick(vb.x, vb.y + 8)
+            Sleep(500)
         }
     }
     AddToLog("[Summer] Picked card " best " of 3 and " (confirmed ? "the vote counted" : "pressed Vote (couldn't confirm it)"))

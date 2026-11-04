@@ -11,7 +11,7 @@
 ;   On=1  Name=<your name in the list>  MinDamage=50M  LeaveWave=47  LeaveBefore=50  DungeonAfter=2
 
 DG_S() {
-    static s := {last: 0, behind: false, matchBehind: false, bad: 0, wave: 0, board: "", boardAt: 0}
+    static s := {last: 0, behind: false, matchBehind: false, bad: 0, wave: 0, board: "", boardAt: 0, zeros: 0}
     return s
 }
 
@@ -154,6 +154,21 @@ DG_Tick() {
         SH_Log("damage: didn't find '" me "' in the list")
         return
     }
+    ; [Zero damage] from wave ZeroLeaveWave (20) on, still exactly 0 damage on two readings in a row means
+    ; no unit is doing anything (wrong place, nothing placed) - leave and start fresh instead of wasting
+    ; the match. ZeroLeaveWave=0 turns it off.
+    zw := Integer(DG_Cfg("ZeroLeaveWave", "20"))
+    if (zw > 0 && s.wave >= zw && myDmg = 0) {
+        s.zeros += 1
+        if (s.zeros >= 2) {
+            AddToLog("[Damage guard] Still 0 damage at wave " s.wave " - leaving to start a fresh match")
+            SH_Log("damage: leaving at wave " s.wave " (0 damage)")
+            s.matchBehind := true
+            DG_MatchEnd()
+            return "leave"
+        }
+    } else if (myDmg > 0)
+        s.zeros := 0
     minDmg := DG_Num(DG_Cfg("MinDamage", "50M"))
     leaveWave := Integer(DG_Cfg("LeaveWave", DG_Cfg("AtWave", "47"))), before := Integer(DG_Cfg("LeaveBefore", "50"))
     last := (n >= 3 && myRank = n)
@@ -219,7 +234,7 @@ DG_MatchEnd() {
         SH_Log("damage: ended the match behind (" s.bad " in a row)")
     } else
         s.bad := 0
-    s.behind := false, s.matchBehind := false, s.wave := 0, s.last := 0
+    s.behind := false, s.matchBehind := false, s.wave := 0, s.last := 0, s.zeros := 0
     after := Integer(DG_Cfg("DungeonAfter", "2"))
     if (after > 0 && s.bad >= after && !SH_FallbackOn()) {   ; Dungeon box unticked: never switch to Dungeon
         s.bad := 0

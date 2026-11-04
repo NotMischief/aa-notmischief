@@ -238,7 +238,21 @@ PlacingUnits() {
         }
     }
     
-    AddToLog("All units placed to requested amounts")
+    ; [Failsafe 3 Nov] not a single unit went down (e.g. a wrong walk took us away from the path): don't
+    ; sit there doing zero damage - go back to spawn once per match and place from there
+    total := 0
+    for k, v in placedCounts
+        total += v
+    static spawnRetry := 0
+    if (total = 0 && spawnRetry != stageStartTime) {
+        spawnRetry := stageStartTime
+        AddToLog("[Placement] Not a single unit went down - teleporting back to spawn and placing from there")
+        try TpSpawn()
+        Sleep(800)
+        try Zoom()
+        return NextStep(PlacingUnits)
+    }
+    AddToLog(total ? "All units placed to requested amounts" : "[Placement] Still no units placed - carrying on with upgrades/monitoring")
     UpgradeUnits()
 }
 

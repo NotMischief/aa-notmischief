@@ -409,9 +409,9 @@ SH_ReadBoard() {
         SH_BoardLast .= it.t "@" it.x "," it.y " "
     ay := -1, ax := 0
     for it in items {
-        if InStr(it.t, "summer event") {
+        if RegExMatch(it.t, "summer\s*event") {   ; [Fix] OCR often reads it as one word "summerevent"
             ay := it.y, ax := it.x
-            rest := Trim(RegExReplace(RegExReplace(it.t, ".*summer event", ""), "\s*[\(\[{].*$", ""))   ; both lines read as one
+            rest := Trim(RegExReplace(RegExReplace(it.t, ".*summer\s*event", ""), "\s*[\(\[{].*$", ""))   ; both lines read as one
             if (StrLen(rest) >= 4 && (m := SH_CanonMap(rest, true)) != "")
                 return SH_SetBoard(m, items)
         }
@@ -1094,6 +1094,22 @@ SH_Mini(mode, name := "") {
 }
 ; [Fix 2 Nov] the loading screen's "Planet Greenie" was taken as the map name for a while, and the
 ; minimap shape / view of the real map got saved as Planet Greenie. Put those aside once.
+; [Fix 3 Nov] a new map was taken for Ant Kingdom for three matches and its "blocked" spots were saved
+; under Ant Kingdom - put today's Ant Kingdom spot memory aside once (older memory is kept).
+SH_FixAntKingdomOnce() {
+    mark := A_ScriptDir "\Settings\fix_ak_1103.txt"
+    if FileExist(mark)
+        return
+    for rel in ["GoodSpots\Ant Kingdom.txt", "PlacementMemory\Ant_Kingdom.png"] {
+        f := A_ScriptDir "\Settings\" rel
+        try {
+            if (FileExist(f) && SubStr(FileGetTime(f, "M"), 1, 8) = "20261103")
+                FileMove(f, f ".bad_1103", 1)
+        }
+    }
+    try FileAppend("done", mark, "UTF-8")
+}
+
 SH_FixPlanetGreenieOnce() {
     mark := A_ScriptDir "\Settings\fix_pg_1102b.txt"
     if FileExist(mark)
@@ -1140,8 +1156,20 @@ SH_MiniMatch() {
 SH_MatchPrint() {
     r := SH_Print("match")
     if (r.Has("name") && r["name"] != "") {
-        AddToLog("Map recognised by its view: " r["name"] " (difference " r["dist"] ")")
-        return r["name"]
+        ; [Fix 3 Nov] a NEW map (Fabled Kingdom in a blizzard) looked enough like Ant Kingdom from spawn,
+        ; so the Ant Kingdom walk ran there and every unit failed. If we know that map's minimap shape and
+        ; the minimap on screen doesn't fit it, don't believe the view.
+        nm := r["name"]
+        if FileExist(A_ScriptDir "\Settings\MiniMaps\" nm ".png") {
+            ms := SH_Mini("score", nm)
+            if (ms.Has("score") && Float(ms["score"]) < 0.6) {
+                AddToLog("[Summer] The view looks like " nm " but the minimap doesn't (" ms["score"] ") - treating the map as unknown")
+                SH_Log("print: " nm " (difference " r["dist"] ") rejected - minimap score " ms["score"])
+                return ""
+            }
+        }
+        AddToLog("Map recognised by its view: " nm " (difference " r["dist"] ")")
+        return nm
     }
     if r.Has("nearest")
         SH_Log("print: no match (nearest " r["nearest"] ", difference " r["dist"] ")")

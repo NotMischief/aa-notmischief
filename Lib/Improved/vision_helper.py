@@ -571,6 +571,14 @@ def cmd_mini(a: dict) -> dict:
     if a.get("mode") == "save" and px < 350:     # enemies already covering much of it - not a clean picture
         return {"ok": "0", "info": f"minimap path too hidden to save ({px} px)"}
     os.makedirs(MINI_DIR, exist_ok=True)
+    if a.get("mode") == "score":   # how well the minimap on screen fits ONE saved map
+        name = "".join(ch if ch.isalnum() or ch in " ()-" else "_" for ch in a.get("name", ""))[:60]
+        ref = cv2.imread(os.path.join(MINI_DIR, name + ".png"), cv2.IMREAD_GRAYSCALE)
+        if ref is None or ref.shape != q.shape:
+            return {"ok": "0", "info": "no saved minimap for " + name}
+        p, r = _mini_score(q, (ref > 127).astype(np.uint8))
+        f = 2 * p * r / max(1e-6, p + r)
+        return {"ok": "1", "score": f"{f:.2f}", "info": f"{name}: {f:.2f} (on path {p:.2f}, path seen {r:.2f})"}
     if a.get("mode") == "save":
         name = "".join(ch if ch.isalnum() or ch in " ()-" else "_" for ch in a.get("name", ""))[:60]
         if not name:

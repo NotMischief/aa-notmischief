@@ -11,55 +11,87 @@
 
 
 CheckAbility() {
-    global AutoAbilityBox  ; Reference your checkbox
-    ; Only check ability if checkbox is checked
-    if (AutoAbilityBox.Value) {
-        if (ok := FT(&X, &Y, 342, 253, 401, 281, 0, 0, AutoOff)) {
-            FixClick(373, 237)  ; Turn ability on
-            AddToLog("Auto Ability Enabled")
+    global AutoAbilityBox  ; the "Auto Ability" box in the macro window
+    if !AutoAbilityBox.Value
+        return
+    ; [UI 21.0, from the 4 Nov recording] a unit with an ability shows a purple ability box right of its
+    ; panel with a sliding switch on top (centre ~318,269). Off = left half plain grey, right half dark
+    ; green with "Off"; On = left half green with "On", right half grey. Cheap pixel check - no reading.
+    st := AB_Toggle()
+    if (st != "off")
+        return
+    loop 2 {
+        FixClick(318, 269)
+        Sleep(400)
+        if (AB_Toggle() = "on") {
+            AddToLog("Auto Ability switched on")
             return
         }
-        ; [UI update] the old "Auto: Off" picture is from before 21.0 and hasn't matched since the update.
-        ; Read the open unit panel instead: an "Auto" switch that says "Off" -> click the switch.
-        ; (Only clicks when both words are found inside the panel area, so it can't misfire.)
-        static lastRead := 0, slowUntil := 0
-        ; [Fix 11-04] this read used to be off unless Settings\AbilityRead.txt = On (it once cost ~18 s), so the
-        ; "Auto Ability" box looked on but did nothing. Now the box decides (AbilityRead.txt = Off still turns
-        ; the read off). Guard instead: if one read is slow (> 4 s), skip reading for 15 minutes.
-        static on := -1
-        if (on = -1) {
-            on := 1
-            try on := InStr(FileRead(A_ScriptDir "\Settings\AbilityRead.txt"), "Off") ? 0 : 1
-        }
-        if (!on || A_TickCount < slowUntil)
-            return
-        if (A_TickCount - lastRead < 8000)   ; one panel read every 8 s at most - keeps upgrades fast
-            return
-        try {
-            if !UP_PanelOpen()
-                return
-            lastRead := A_TickCount
-            t0 := A_TickCount
-            items := SH_Items(0, 150, 420, 300)
-            if (A_TickCount - t0 > 4000) {
-                slowUntil := A_TickCount + 900000
-                AddToLog("[Ability] Reading the unit panel was slow (" (A_TickCount - t0) " ms) - not checking Auto Ability for 15 minutes")
-            }
-            autoIt := 0, offIt := 0
-            for it in items {
-                if RegExMatch(it.t, "auto")
-                    autoIt := it
-                if RegExMatch(it.t, "^off$|auto\W*off|\boff\b")
-                    offIt := it
-            }
-            if (autoIt && offIt && Abs(autoIt.y - offIt.y) < 40 && Abs(autoIt.x - offIt.x) < 160) {
-                FixClick(offIt.x, offIt.y)
-                AddToLog("Auto Ability switched on (read from the panel)")
-            }
-        }
+    }
+    static lastLog := 0
+    if (A_TickCount - lastLog > 30000) {
+        AddToLog("[Ability] Clicked the Auto switch but it still looks off")
+        lastLog := A_TickCount
     }
 }
 
+; "off" / "on" when the ability switch is on screen, "" when it isn't (no ability, or the panel is closed)
+AB_Toggle() {
+    old := A_CoordModePixel
+    CoordMode("Pixel", "Client")
+    lN := 0, lG := 0, rN := 0, rG := 0, n := 0
+    try {
+        y := 263
+        while (y <= 275) {
+            x := 0
+            while (x <= 18) {
+                for side in [0, 1] {
+                    c := PixelGetColor((side ? 324 : 294) + x, y)
+                    r := (c >> 16) & 255, g := (c >> 8) & 255, b := c & 255
+                    v := (r + g + b) / 3
+                    neut := (Abs(r - g) < 9 && Abs(g - b) < 9 && v >= 14 && v <= 45)
+                    grn := (g >= r + 15 && g <= 120 && r < 60)
+                    if side
+                        rN += neut, rG += grn
+                    else
+                        lN += neut, lG += grn
+                }
+                n += 1
+                x += 3
+            }
+            y += 3
+        }
+    }
+    if !n {
+        CoordMode("Pixel", old)
+        return ""
+    }
+    lN /= n, lG /= n, rN /= n, rG /= n
+    if (lN >= 0.6 && rG >= 0.4) {
+        ; and the purple ability box must be right under it (an open chat box once looked like the switch)
+        k := 0, m := 0
+        try {
+            y := 288
+            while (y <= 340) {
+                x := 294
+                while (x <= 346) {
+                    c := PixelGetColor(x, y)
+                    r := (c >> 16) & 255, g := (c >> 8) & 255, b := c & 255
+                    k += (b > 140 && r > 70 && g < 110 && b > g + 50)
+                    m += 1
+                    x += 4
+                }
+                y += 4
+            }
+        }
+        CoordMode("Pixel", old)
+        return (m && k / m >= 0.08) ? "off" : ""
+    }
+    CoordMode("Pixel", old)
+    if (rN >= 0.35 && lG >= 0.25)
+        return "on"
+    return ""
+}
 
 CheckForMahoraga() {
     global setMahoragoStyle

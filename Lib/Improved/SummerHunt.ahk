@@ -131,7 +131,7 @@ SH_VoteVisible() {
 SH_VotePic(tag) {
     static n := 0
     n += 1
-    if (n > 40)          ; only the first votes of a session
+    if (n > 10)          ; only the first votes of a session (a picture costs a moment)
         return
     try {
         dir := A_ScriptDir "\Logs\CardVote"
@@ -154,30 +154,12 @@ SH_VoteBtn() {
     ; [Fix 11-04] "^vote\W" also matched the "Vote ends in: 6s" timer just above the button, so the macro
     ; clicked the TIMER text instead of the Vote button. Only the exact word counts now, and only below
     ; the timer line (the timer sits at y ~467, the button at ~499).
+    ; (No colour search: enemy health bars are bright green right at this height - one saved card picture
+    ; had 4 green bar points at y 503 - so a colour hit could send the press onto a health bar.)
     vb := 0
     try vb := SH_Find("^vote!?$", 200, 478, 400, 52)
     if (vb && !InStr(vb.t, "end"))
         return {x: vb.x, y: vb.y, found: true}
-    old := A_CoordModePixel
-    CoordMode("Pixel", "Client")
-    sx := 0, sy := 0, n := 0
-    try {
-        y := 478
-        while (y <= 508) {          ; stay above the hotbar (y 512+), whose card frames can be green too
-            x := 260
-            while (x <= 560) {
-                c := PixelGetColor(x, y)
-                r := (c >> 16) & 255, g := (c >> 8) & 255, b := c & 255
-                if (g >= 160 && r < 120 && b < 120)
-                    sx += x, sy += y, n += 1
-                x += 10
-            }
-            y += 5
-        }
-    }
-    CoordMode("Pixel", old)
-    if (n >= 6)
-        return {x: Round(sx / n), y: Round(sy / n), found: true}
     return {x: 355, y: 499, found: false}   ; where you clicked it in the 4 Nov recording
 }
 
@@ -221,7 +203,11 @@ SH_HandleCardsBeforePlacing(maxMs := 16000) {
 }
 
 SH_Cards(force := false) {
-    static last := 0
+    static last := 0, votedAt := 0
+    ; [Fix 11-04] our vote for this card screen already counted (seen a moment ago) - don't press the cards
+    ; again (the "re-vote after 5 s" check before placing would otherwise press the card a second time)
+    if (votedAt && A_TickCount - votedAt < 10000)
+        return SH_CardsUp()
     if (!force && !SH_CardsUp())   ; [Speed] instant pixel check first - no text reading unless cards are up
         return false
     if (!force && A_TickCount - last < 4000)      ; [Speed] a card vote lasts ~10 s - every 4 s is plenty
@@ -240,8 +226,7 @@ SH_Cards(force := false) {
         t := SH_Text(xs[A_Index], 195, 168, 200)
         scores[A_Index] := SH_CardScore(t)
         ; the vote count under the card
-        v := SH_Text(xs[A_Index] + 50, 408, 70, 32)
-        votes[A_Index] := RegExMatch(v, "\d+", &m) ? Integer(m[0]) : 0
+        votes[A_Index] := SH_VoteCount(SH_Text(xs[A_Index] + 50, 408, 70, 32))
         desc .= A_Index ": " SubStr(t, 1, 50) " (score " scores[A_Index] ", votes " votes[A_Index] ")  "
     }
     ; go with the majority - the card most players voted for; ties / no votes yet -> the best-scored card
@@ -251,43 +236,72 @@ SH_Cards(force := false) {
         if (sc > bestScore)
             best := A_Index, bestScore := sc
     }
-    ; [Fix] select the card, press Vote, then CHECK it counted (the Vote button goes away / the count under
-    ; our card goes up) - before, a press that landed while the button was still sliding in was never retried
-    confirmed := false, how := ""
+    ; [Fix 11-04] the order from your 4 Nov recording: press the card ONCE, then the Vote button under the
+    ; cards (you pressed it at 355, 499). A card press alone is not a vote.
+    ; [Speed] the first Vote press goes straight to that spot - no reading first (a reading costs a moment
+    ; and the vote only lasts ~10 s). After that the press is CHECKED: the count under our card goes up, or
+    ; the Vote button we saw goes away. If the button is still there, it's pressed again where it was seen.
+    ; The card is pressed again only when no Vote button shows at all (pressing it twice might un-select it).
+    cx := xs[best] + 84
+    FixClick(cx, 300)                         ; select the card
+    Sleep(500)                                ; the Vote button pops up under the cards (under 1 s in the recording)
+    vb := {x: 355, y: 499, found: false}
+    confirmed := false, how := "", reselected := false
     loop 4 {
-        FixClick(xs[best] + 84, 300)          ; select the card
-        Sleep(450)
-        vb := SH_VoteBtn()
+        FixClick(vb.x, vb.y)                  ; press Vote
+        Sleep(350)
         if (A_Index = 1)
-            SH_VotePic("before")              ; [Proof] picture with the card selected, before Vote
-        FixClick(vb.x, vb.y)                  ; and press the green Vote button
-        Sleep(700)
-        if (A_Index = 1)
-            SH_VotePic("after")
+            SH_VotePic("after")               ; [Proof] picture right after pressing Vote (first votes only)
         if !SH_CardsUp() {                    ; vote over / panel closed
             ; [Honest] the cards also close when the vote timer runs out - that alone doesn't prove our vote
             ; counted, only if we really pressed the Vote button we had seen
-            confirmed := vb.found, how := "cards closed after pressing the Vote button we saw"
+            confirmed := vb.found, how := "cards closed right after pressing Vote"
             break
         }
-        v2 := SH_Text(xs[best] + 50, 408, 70, 32)
-        nowVotes := RegExMatch(v2, "\d+", &m2) ? Integer(m2[0]) : 0
-        ; [Fix] "the button is gone" only proves something if we actually SAW the button before - when it
-        ; was never found, a missed press was counted as a vote and never retried
+        ; the count alone isn't proof in a full match (another player can vote for the same card in that
+        ; moment) - it counts together with the Vote button going away
+        nowVotes := SH_VoteCount(SH_Text(xs[best] + 50, 408, 70, 32))
         after := SH_VoteBtn()
-        if (nowVotes > votes[best] || (vb.found && !after.found)) {
-            confirmed := true, how := nowVotes > votes[best] ? "vote count " votes[best] "->" nowVotes : "Vote button gone"
+        if (!after.found && (nowVotes > votes[best] || vb.found)) {
+            confirmed := true
+            how := nowVotes > votes[best] ? "vote count " votes[best] "->" nowVotes ", Vote button gone" : "Vote button gone after pressing it"
             break
         }
-        if (A_Index = 2) {                    ; second miss: also click a bit lower (the button's middle)
-            FixClick(vb.x, vb.y + 8)
-            Sleep(500)
+        if after.found {                      ; the button is (still) there - that press didn't count yet
+            vb := after
+            how := nowVotes > votes[best] ? "count went up but the Vote button still shows" : "Vote button still showing"
+            continue
         }
+        ; pressed the usual spot without seeing the button, and there's no button now: either the vote went
+        ; in (the button goes away) or the card isn't selected. Select the card once more and look again.
+        if reselected {
+            how := "no Vote button after selecting the card again - most likely counted already"
+            break
+        }
+        reselected := true
+        FixClick(cx, 300)
+        Sleep(500)
+        after := SH_VoteBtn()
+        if !after.found {
+            how := "no Vote button after selecting the card again - most likely counted already"
+            break
+        }
+        vb := after
     }
-    AddToLog("[Summer] Picked card " best " of 3 and " (confirmed ? "the vote counted" : "pressed Vote (couldn't confirm it)"))
-    SH_Log("cards: " desc " -> picked " best (confirmed ? " (confirmed: " how ")" : " (NOT confirmed)") " - Vote button " (vb.found ? "seen at " vb.x "," vb.y : "not seen, clicked the usual spot"))
+    if confirmed
+        votedAt := A_TickCount
+    AddToLog("[Summer] Picked card " best " of 3 and " (confirmed ? "the vote counted" : "pressed Vote (couldn't confirm it" (how != "" ? ": " how : "") ")"))
+    SH_Log("cards: " desc " -> picked " best (confirmed ? " (confirmed: " how ")" : " (NOT confirmed" (how != "" ? ": " how : "") ")") " - Vote button " (vb.found ? "seen at " vb.x "," vb.y : "not seen, pressed the usual spot 355,499"))
     Sleep(300)
     return true
+}
+
+; the vote count under a card - a lone "1" is often read as "l" / "|" / "i"
+SH_VoteCount(t) {
+    t := Trim(t)
+    if RegExMatch(t, "^[l|!i]$")
+        return 1
+    return RegExMatch(t, "\d+", &m) ? Integer(m[0]) : 0
 }
 
 SH_CardScore(t) {

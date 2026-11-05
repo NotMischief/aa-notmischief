@@ -14,8 +14,8 @@ CheckAbility() {
     global AutoAbilityBox  ; the "Auto Ability" box in the macro window
     if !AutoAbilityBox.Value
         return
-    ; [UI 21.0, from the 4 Nov recording] a unit with an ability shows a purple ability box right of its
-    ; panel with a sliding switch on top (centre ~318,269). Off = left half plain grey, right half dark
+    ; [UI 21.0, from the 4 Nov recording] a unit with an ability shows an ability box right of its panel
+    ; (its colour depends on the unit) with a sliding switch on top (centre ~318,269). Off = left half plain grey, right half dark
     ; green with "Off"; On = left half green with "On", right half grey. Cheap pixel check - no reading.
     st := AB_Toggle()
     if (st != "off")
@@ -68,24 +68,10 @@ AB_Toggle() {
     }
     lN /= n, lG /= n, rN /= n, rG /= n
     if (lN >= 0.6 && rG >= 0.4) {
-        ; and the purple ability box must be right under it (an open chat box once looked like the switch)
-        k := 0, m := 0
-        try {
-            y := 288
-            while (y <= 340) {
-                x := 294
-                while (x <= 346) {
-                    c := PixelGetColor(x, y)
-                    r := (c >> 16) & 255, g := (c >> 8) & 255, b := c & 255
-                    k += (b > 140 && r > 70 && g < 110 && b > g + 50)
-                    m += 1
-                    x += 4
-                }
-                y += 4
-            }
-        }
         CoordMode("Pixel", old)
-        return (m && k / m >= 0.08) ? "off" : ""
+        ; the switch only exists next to an open unit panel - checking the panel's X keeps other grey/green
+        ; things (an open chat box once) from being taken for it. The box's colour doesn't matter.
+        return UP_PanelOpen() ? "off" : ""
     }
     CoordMode("Pixel", old)
     if (rN >= 0.35 && lG >= 0.25)

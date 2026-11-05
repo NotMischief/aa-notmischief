@@ -44,6 +44,8 @@ SH_Items(x, y, w, h, scale := 1) {
         return items
     }
     ; no Python helper: Windows OCR, words with positions (screen coordinates)
+    if SH_InWatch        ; [Cards watch] not from the watcher - the macro may be inside a Windows reading already
+        return items
     try {
         res := OCR.FromRect(ox + x, oy + y, w, h, "FirstFromAvailableLanguages", { scale: 2.0 })
         for wd in res.Words {
@@ -183,6 +185,101 @@ SH_CardsUp() {
     return up
 }
 
+; [Cards watch 11-04] the card vote only lasts ~10 s, and it used to be looked for only BETWEEN placing /
+; upgrading steps - a long upgrade round could miss it completely. Now a light timer looks for the cards every
+; 0.3 s (a few pixels, no reading) and votes right away. Whatever the macro was doing waits until the cards
+; are gone (its clicks would land on the cards anyway), then carries on.
+global SH_CardBusy := false          ; a vote is being done right now (main macro or the watcher)
+global SH_CardsSeenAt := 0           ; when the cards were first seen up (0 = not up)
+global SH_CardWatchPause := 0        ; no watching until this time (settings menu / leaving)
+global SH_InWatch := false           ; the watcher is voting right now (it only reads with the Python helper)
+
+; Off switch, just in case: a file Settings\CardWatch.txt that says Off (then only the old checks between steps)
+SH_CardWatchStart() {
+    try {
+        if RegExMatch(FileRead(A_ScriptDir "\Settings\CardWatch.txt"), "i)^\s*off")
+            return
+    }
+    SetTimer(SH_CardWatch, 300)
+}
+
+SH_CardWatch() {
+    global SH_CardsSeenAt, SH_InWatch
+    static fails := 0, waitUntil := 0
+    try {
+        if (!MacroLoopState.Active || !SH_On() || A_TickCount < SH_CardWatchPause) {
+            SH_CardsSeenAt := 0
+            return
+        }
+        if !SH_CardsUp() {
+            SH_CardsSeenAt := 0, fails := 0
+            return
+        }
+        if !SH_CardsSeenAt
+            SH_CardsSeenAt := A_TickCount
+        if (SH_CardBusy || A_TickCount < waitUntil)
+            return                   ; already voting (the macro was doing it) / not the card screen a moment ago
+        ; [Safety] only in a match (the base health bar is showing - a few lobby menus fool the quick card check),
+        ; and only while the Python helper answers: the built-in Windows reading may be in use by the upgrade
+        ; code at this very moment and must not be started twice. Otherwise the old checks between steps vote.
+        if (!SH_MatchBar() || !VH_Ready() || A_TickCount < VH_S().failUntil || !VH_Enabled()) {
+            waitUntil := A_TickCount + 1000
+            return
+        }
+        SH_InWatch := true
+        try {
+            r := SH_Cards(true)
+        } finally {
+            SH_InWatch := false
+        }
+        if !r {                      ; the title didn't read as a card vote - look again a bit later
+            fails += 1
+            waitUntil := A_TickCount + (fails >= 3 ? 10000 : 1500)
+            return
+        }
+        fails := 0
+        if (r != "already")
+            AddToLog("[Summer] Cards popped up - voted right away (the macro waits until they're gone)")
+        t0 := A_TickCount
+        while (A_TickCount - t0 < 12000 && SH_CardsUp()) {
+            Sleep(300)
+            if (A_TickCount - t0 > 4500) {
+                SH_InWatch := true
+                try {
+                    SH_Cards()       ; does nothing once our vote counted; one more try if it wasn't confirmed
+                } finally {
+                    SH_InWatch := false
+                }
+            }
+        }
+        Sleep(200)
+    }
+}
+
+; the base health bar under the map title (green, red when hit) - only there in a match. On 712 saved
+; pictures: every match picture 7-10 of 12 spots, the lobby menus that fool SH_CardsUp 0.
+SH_MatchBar() {
+    old := A_CoordModePixel
+    CoordMode("Pixel", "Client")
+    n := 0
+    try {
+        x := 180
+        while (x <= 620) {
+            for y in [58, 61, 64] {
+                c := PixelGetColor(x, y)
+                r := (c >> 16) & 255, g := (c >> 8) & 255, b := c & 255
+                if ((g >= 150 && r <= 120 && b <= 120) || (r >= 150 && g <= 80 && b <= 80)) {
+                    n += 1
+                    break
+                }
+            }
+            x += 40
+        }
+    }
+    CoordMode("Pixel", old)
+    return n >= 6
+}
+
 ; before placing: if the cards are up, vote and wait until they're gone (clicks under them would miss)
 SH_HandleCardsBeforePlacing(maxMs := 16000) {
     if (!SH_On() || !SH_CardsUp())
@@ -203,11 +300,23 @@ SH_HandleCardsBeforePlacing(maxMs := 16000) {
 }
 
 SH_Cards(force := false) {
+    global SH_CardBusy
+    if SH_CardBusy           ; already voting (the watcher interrupted it, or the other way round)
+        return true
+    SH_CardBusy := true
+    try {
+        return SH_CardsVote(force)
+    } finally {
+        SH_CardBusy := false
+    }
+}
+
+SH_CardsVote(force := false) {
     static last := 0, votedAt := 0
     ; [Fix 11-04] our vote for this card screen already counted (seen a moment ago) - don't press the cards
     ; again (the "re-vote after 5 s" check before placing would otherwise press the card a second time)
     if (votedAt && A_TickCount - votedAt < 10000)
-        return SH_CardsUp()
+        return SH_CardsUp() ? "already" : false
     if (!force && !SH_CardsUp())   ; [Speed] instant pixel check first - no text reading unless cards are up
         return false
     if (!force && A_TickCount - last < 4000)      ; [Speed] a card vote lasts ~10 s - every 4 s is plenty
@@ -216,6 +325,7 @@ SH_Cards(force := false) {
     title := SH_Text(280, 145, 240, 36)
     if !RegExMatch(title, "choose a card|weather shifts")
         return false
+    seenAt := SH_CardsSeenAt ? SH_CardsSeenAt : A_TickCount   ; when the cards came up (for "closed early")
     ; close a unit's upgrade panel first - it covers the left card
     if UP_ClosePanel()   ; [UI update] the panel's X is at (277, 227) now, not (329, 187)
         Sleep(300)
@@ -225,8 +335,10 @@ SH_Cards(force := false) {
     loop 3 {
         t := SH_Text(xs[A_Index], 195, 168, 200)
         scores[A_Index] := SH_CardScore(t)
-        ; the vote count under the card
-        votes[A_Index] := SH_VoteCount(SH_Text(xs[A_Index] + 50, 408, 70, 32))
+        ; the vote count under the card. [Fix 11-04] the box reaches higher now: the SELECTED card rises
+        ; ~16 px, and its number (y 402-413 instead of 417-430 in your 4 Nov recording) was half outside
+        ; the old box - so the count of our own card could never be read going up.
+        votes[A_Index] := SH_VoteCount(SH_Text(xs[A_Index] + 50, 396, 70, 44))
         desc .= A_Index ": " SubStr(t, 1, 50) " (score " scores[A_Index] ", votes " votes[A_Index] ")  "
     }
     ; go with the majority - the card most players voted for; ties / no votes yet -> the best-scored card
@@ -236,62 +348,68 @@ SH_Cards(force := false) {
         if (sc > bestScore)
             best := A_Index, bestScore := sc
     }
-    ; [Fix 11-04] the order from your 4 Nov recording: press the card ONCE, then the Vote button under the
-    ; cards (you pressed it at 355, 499). A card press alone is not a vote.
-    ; [Speed] the first Vote press goes straight to that spot - no reading first (a reading costs a moment
-    ; and the vote only lasts ~10 s). After that the press is CHECKED: the count under our card goes up, or
-    ; the Vote button we saw goes away. If the button is still there, it's pressed again where it was seen.
-    ; The card is pressed again only when no Vote button shows at all (pressing it twice might un-select it).
+    ; [Fix 11-04] select the card, then press the GREEN Vote button under the cards (a card press alone is
+    ; not a vote). The button is found by its colour - bright green, about x 282-413, y 480-508 next to the
+    ; red Cancel - checked on 712 saved pictures: the 11 with the button scored 40-42, all others 14 or less
+    ; (enemy health bars are green too, but thin). The press goes in the moment it shows up.
     cx := xs[best] + 84
     FixClick(cx, 300)                         ; select the card
-    Sleep(500)                                ; the Vote button pops up under the cards (under 1 s in the recording)
-    vb := {x: 355, y: 499, found: false}
-    confirmed := false, how := "", reselected := false
-    loop 4 {
+    tSel := A_TickCount
+    btn := SH_VoteUp()
+    while (A_TickCount - tSel < 1500 && !(btn.up && A_TickCount - tSel >= 250)) {
+        Sleep(60)                             ; (250 ms at least: if another card was selected by a stray
+        btn := SH_VoteUp()                    ;  click, its button is already up - let ours take over first)
+    }
+    if !btn.up {                              ; no button: the press missed the card - once more
+        FixClick(cx, 300)
+        tSel := A_TickCount
+        while (A_TickCount - tSel < 1000 && !(btn := SH_VoteUp()).up)
+            Sleep(60)
+    }
+    vb := btn.up ? {x: btn.x, y: btn.y, found: true} : SH_VoteBtn()   ; last resort: by its text
+    confirmed := false, how := "", closed := false
+    loop 3 {
         FixClick(vb.x, vb.y)                  ; press Vote
-        Sleep(350)
+        pressAt := A_TickCount
+        gone := false
+        while (A_TickCount - pressAt < 800) {
+            Sleep(60)
+            if !SH_CardsUp() {
+                closed := true
+                break
+            }
+            if (vb.found && !SH_VoteUp().up) {
+                gone := true
+                break
+            }
+        }
         if (A_Index = 1)
             SH_VotePic("after")               ; [Proof] picture right after pressing Vote (first votes only)
-        if !SH_CardsUp() {                    ; vote over / panel closed
-            ; [Honest] the cards also close when the vote timer runs out - that alone doesn't prove our vote
-            ; counted, only if we really pressed the Vote button we had seen
-            confirmed := vb.found, how := "cards closed right after pressing Vote"
+        if closed {
+            ; [Fix 11-04] when everyone has voted (always, when you're alone) the vote ends RIGHT after the
+            ; last press - too fast to see the number go up. Cards gone well before the ~10 s are up = it counted.
+            secs := Round((pressAt - seenAt) / 1000, 1)
+            if (pressAt - seenAt < 7000) {
+                confirmed := true, how := "the vote ended right after our press (" secs " s into it) - everyone had voted"
+            } else {
+                confirmed := vb.found, how := "cards closed right after pressing Vote, but the time was nearly up (" secs " s in)"
+            }
             break
         }
-        ; the count alone isn't proof in a full match (another player can vote for the same card in that
-        ; moment) - it counts together with the Vote button going away
-        nowVotes := SH_VoteCount(SH_Text(xs[best] + 50, 408, 70, 32))
-        after := SH_VoteBtn()
-        if (!after.found && (nowVotes > votes[best] || vb.found)) {
-            confirmed := true
-            how := nowVotes > votes[best] ? "vote count " votes[best] "->" nowVotes ", Vote button gone" : "Vote button gone after pressing it"
+        if gone {
+            confirmed := true, how := "the green Vote button went away after the press"
             break
         }
-        if after.found {                      ; the button is (still) there - that press didn't count yet
-            vb := after
-            how := nowVotes > votes[best] ? "count went up but the Vote button still shows" : "Vote button still showing"
-            continue
-        }
-        ; pressed the usual spot without seeing the button, and there's no button now: either the vote went
-        ; in (the button goes away) or the card isn't selected. Select the card once more and look again.
-        if reselected {
-            how := "no Vote button after selecting the card again - most likely counted already"
-            break
-        }
-        reselected := true
-        FixClick(cx, 300)
-        Sleep(500)
-        after := SH_VoteBtn()
-        if !after.found {
-            how := "no Vote button after selecting the card again - most likely counted already"
-            break
-        }
-        vb := after
+        ; (the number under the card is NOT used to check: on saved pictures the picked card's glow changed
+        ; its white pixels as much as a real 1 -> 2 did)
+        btn := SH_VoteUp()                    ; still there, nothing changed: press it again where it is now
+        vb := btn.up ? {x: btn.x, y: btn.y, found: true} : SH_VoteBtn()
+        how := "Vote button still showing after " A_Index " press" (A_Index > 1 ? "es" : "")
     }
-    if confirmed
+    if (confirmed || closed)
         votedAt := A_TickCount
     AddToLog("[Summer] Picked card " best " of 3 and " (confirmed ? "the vote counted" : "pressed Vote (couldn't confirm it" (how != "" ? ": " how : "") ")"))
-    SH_Log("cards: " desc " -> picked " best (confirmed ? " (confirmed: " how ")" : " (NOT confirmed" (how != "" ? ": " how : "") ")") " - Vote button " (vb.found ? "seen at " vb.x "," vb.y : "not seen, pressed the usual spot 355,499"))
+    SH_Log("cards: " desc " -> picked " best (confirmed ? " (confirmed: " how ")" : " (NOT confirmed" (how != "" ? ": " how : "") ")") " - Vote button " (vb.found ? "seen at " vb.x "," vb.y : "not seen, pressed the usual spot " vb.x "," vb.y))
     Sleep(300)
     return true
 }
@@ -304,6 +422,28 @@ SH_VoteCount(t) {
     return RegExMatch(t, "\d+", &m) ? Integer(m[0]) : 0
 }
 
+; [Cards 11-04] the green Vote button under the cards: {up, x, y} (x, y = its middle)
+SH_VoteUp() {
+    old := A_CoordModePixel
+    CoordMode("Pixel", "Client")
+    n := 0, sx := 0, sy := 0
+    try {
+        y := 488
+        while (y <= 504) {
+            x := 300
+            while (x <= 396) {
+                c := PixelGetColor(x, y)
+                r := (c >> 16) & 255, g := (c >> 8) & 255, b := c & 255
+                if (g >= 140 && r <= 110 && b <= 70 && g - r >= 80)
+                    n += 1, sx += x, sy += y
+                x += 8
+            }
+            y += 4
+        }
+    }
+    CoordMode("Pixel", old)
+    return n >= 28 ? {up: true, x: Round(sx / n), y: Round(sy / n)} : {up: false, x: 350, y: 496}
+}
 SH_CardScore(t) {
     s := 0
     if InStr(t, "pearl")
@@ -855,6 +995,17 @@ SH_CloseSettings(force := false) {
 }
 
 SH_SettingsClick(regex, what) {
+    ; [Cards watch] no card voting while the settings menu is open (its clicks would hit the menu)
+    global SH_CardWatchPause
+    prev := SH_CardWatchPause
+    SH_CardWatchPause := Max(prev, A_TickCount + 30000)
+    try {
+        return SH_SettingsClickDo(regex, what)
+    } finally {
+        SH_CardWatchPause := prev
+    }
+}
+SH_SettingsClickDo(regex, what) {
     FixClick(27, 572)          ; gear (bottom left)
     Sleep(700)
     if !RegExMatch(SH_Text(150, 100, 500, 120), "settings|info") {

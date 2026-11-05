@@ -53,9 +53,14 @@ MoveToPosition(PosX, PosY) {
 
 
 FixClick(x, y, LR := "Left") {
+    ; [Cards watch] move + click as one piece: the card-vote timer can't slip in between them (the click
+    ; is relative to wherever the mouse is - it would land where the timer left the mouse)
+    prev := A_IsCritical
+    Critical
     MouseMove(x, y)
     MouseMove(1, 0, , "R")
     MouseClick(LR, -1, 0, , , , "R")
+    Critical(prev)
     Sleep(50)
 }
 

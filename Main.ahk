@@ -73,6 +73,7 @@ WM_Init()   ; [Watch mode]
 try SH_FixAntKingdomOnce()     ; [Fix] Ant Kingdom spot memory polluted by a mis-recognised map on 3 Nov
 try SH_FixPlanetGreenieOnce()   ; [Fix] wrongly saved "Planet Greenie" minimap/view from 2 Nov
 VH_Start()   ; [Python vision] start the helper (falls back silently if Python is missing)
+SH_CardWatchStart()   ; [Cards watch] looks for the Summer card vote every 0.3 s, even while placing / upgrading
 
 ;DEBUG SECTIOn
 

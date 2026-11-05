@@ -741,6 +741,7 @@ TpSpawn() {
 }
 
 TpLobby() {
+    global SH_CardWatchPause := A_TickCount + 20000   ; [Cards watch] no card voting while leaving
     ; [UI update] find "Return / Teleport to Lobby" by its text first
     if SH_SettingsClick("lobby", "Return to Lobby") {
         Sleep(1500)

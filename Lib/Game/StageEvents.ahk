@@ -22,15 +22,16 @@ CheckAbility() {
         ; [UI update] the old "Auto: Off" picture is from before 21.0 and hasn't matched since the update.
         ; Read the open unit panel instead: an "Auto" switch that says "Off" -> click the switch.
         ; (Only clicks when both words are found inside the panel area, so it can't misfire.)
-        static lastRead := 0
-        ; [Pace] this panel read cost ~18 s right after the first placement of a room (seen 11-02 06:50), and
-        ; none of your current units shows an Auto switch - so it's off unless Settings\AbilityRead.txt = On
+        static lastRead := 0, slowUntil := 0
+        ; [Fix 11-04] this read used to be off unless Settings\AbilityRead.txt = On (it once cost ~18 s), so the
+        ; "Auto Ability" box looked on but did nothing. Now the box decides (AbilityRead.txt = Off still turns
+        ; the read off). Guard instead: if one read is slow (> 4 s), skip reading for 15 minutes.
         static on := -1
         if (on = -1) {
-            on := 0
-            try on := InStr(FileRead(A_ScriptDir "\Settings\AbilityRead.txt"), "On") ? 1 : 0
+            on := 1
+            try on := InStr(FileRead(A_ScriptDir "\Settings\AbilityRead.txt"), "Off") ? 0 : 1
         }
-        if (!on)
+        if (!on || A_TickCount < slowUntil)
             return
         if (A_TickCount - lastRead < 8000)   ; one panel read every 8 s at most - keeps upgrades fast
             return
@@ -38,7 +39,12 @@ CheckAbility() {
             if !UP_PanelOpen()
                 return
             lastRead := A_TickCount
+            t0 := A_TickCount
             items := SH_Items(0, 150, 420, 300)
+            if (A_TickCount - t0 > 4000) {
+                slowUntil := A_TickCount + 900000
+                AddToLog("[Ability] Reading the unit panel was slow (" (A_TickCount - t0) " ms) - not checking Auto Ability for 15 minutes")
+            }
             autoIt := 0, offIt := 0
             for it in items {
                 if RegExMatch(it.t, "auto")

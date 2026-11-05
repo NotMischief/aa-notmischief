@@ -463,19 +463,71 @@ SH_CardScore(t) {
 
 ; ---- end screen ---------------------------------------------------------------------------
 SH_EndVisible() {
-    static last := 0
-    if (A_TickCount - last < 6000)      ; [Speed] reading text is the heavy part - not every loop
+    ; [Fix 11-05] a won match went unnoticed while the macro was upgrading (damage guard catching up at wave
+    ; 46-50): the open upgrade panel covers the left half of the results, and the old reading box started at
+    ; x 220 - "VICTORY!!!" begins at x 156, so the word was cut. Now: the green Next button (pixels, instant)
+    ; says the results are up -> close the upgrade panel -> read the whole result panel.
+    static last := 0, nextSince := 0
+    nextUp := SH_NextBtnUp()
+    if !nextUp
+        nextSince := 0
+    else if !nextSince
+        nextSince := A_TickCount
+    if (A_TickCount - last < (nextUp ? 1000 : 6000))   ; [Speed] reading text is the heavy part - not every loop
         return false
     last := A_TickCount
-    t := SH_Text(220, 140, 360, 110) " " SH_Text(150, 90, 500, 50)   ; result title / lobby + replay buttons
-    return RegExMatch(t, "defeat|victory|waves completed|total time|return to lobby|replay") ? true : false
+    if (nextUp && UP_PanelOpen()) {   ; (only when the results are there - mid-upgrade the panel must stay open)
+        UP_ClosePanel()
+        Sleep(250)
+    }
+    t := SH_Text(130, 90, 590, 280)   ; title, time, waves, XP, and the Return to lobby / Replay buttons
+    n := 0
+    for re in ["victory|ctory!|defeat|efeat", "waves completed|completed:\s*\d", "total time|time:\s*\d+:\d\d"
+             , "xp progress|\+\s*\d+\s*xp", "return to lobby", "replay", "waiting for players"]
+        if RegExMatch(t, re)
+            n += 1
+    if (n >= 2)                       ; two signs, so the in-match settings menu ("Return to Lobby") isn't one
+        return true
+    ; the text couldn't be read, but the Next button has stayed up for 4 s - those are the results
+    return (nextUp && A_TickCount - nextSince >= 4000)
+}
+
+; [End screen 11-05] the green Next button under the results (about x 268-372, y 378-410). On 712 saved
+; pictures: all 11 result screens 26 of 36 spots, everything else 14 or less (Dungeon "Continue" 14, the
+; lobby captcha's "Submit" 13). A unit's upgrade panel doesn't reach it.
+SH_NextBtnUp() {
+    old := A_CoordModePixel
+    CoordMode("Pixel", "Client")
+    n := 0
+    try {
+        y := 386
+        while (y <= 404) {
+            x := 296
+            while (x <= 360) {
+                c := PixelGetColor(x, y)
+                r := (c >> 16) & 255, g := (c >> 8) & 255, b := c & 255
+                if (g >= 150 && r <= 130 && b <= 100 && g - r >= 60)
+                    n += 1
+                x += 8
+            }
+            if (y = 386 && n < 7)     ; [Speed] the top row is all green on every result screen (9 of 9) -
+                break                 ; anything else stops after 9 spots
+            y += 6
+        }
+    }
+    CoordMode("Pixel", old)
+    return n >= 20
 }
 
 SH_Result() {
-    t := SH_Text(150, 120, 500, 330)
-    if InStr(t, "victory")
+    if (SH_NextBtnUp() && UP_PanelOpen()) {   ; [Fix 11-05] the upgrade panel hid the left of "VICTORY!!!"
+        UP_ClosePanel()
+        Sleep(250)
+    }
+    t := SH_Text(130, 120, 520, 330)
+    if RegExMatch(t, "victory|ctory!|tory!!")
         return "win"
-    if InStr(t, "defeat")
+    if RegExMatch(t, "defeat|efeat")
         return "loss"
     return ""
 }

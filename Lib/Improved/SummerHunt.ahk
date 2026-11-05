@@ -151,9 +151,12 @@ SH_VotePic(tag) {
 
 ; the green Vote button under the cards: by its text, else by its green colour. {x, y, found}
 SH_VoteBtn() {
+    ; [Fix 11-04] "^vote\W" also matched the "Vote ends in: 6s" timer just above the button, so the macro
+    ; clicked the TIMER text instead of the Vote button. Only the exact word counts now, and only below
+    ; the timer line (the timer sits at y ~467, the button at ~499).
     vb := 0
-    try vb := SH_Find("^vote!?$|^vote\W", 200, 450, 400, 90)
-    if vb
+    try vb := SH_Find("^vote!?$", 200, 478, 400, 52)
+    if (vb && !InStr(vb.t, "end"))
         return {x: vb.x, y: vb.y, found: true}
     old := A_CoordModePixel
     CoordMode("Pixel", "Client")
@@ -175,7 +178,7 @@ SH_VoteBtn() {
     CoordMode("Pixel", old)
     if (n >= 6)
         return {x: Round(sx / n), y: Round(sy / n), found: true}
-    return {x: 340, y: 496, found: false}
+    return {x: 355, y: 499, found: false}   ; where you clicked it in the 4 Nov recording
 }
 
 SH_CardsUp() {
@@ -262,7 +265,9 @@ SH_Cards(force := false) {
         if (A_Index = 1)
             SH_VotePic("after")
         if !SH_CardsUp() {                    ; vote over / panel closed
-            confirmed := true, how := "cards closed"
+            ; [Honest] the cards also close when the vote timer runs out - that alone doesn't prove our vote
+            ; counted, only if we really pressed the Vote button we had seen
+            confirmed := vb.found, how := "cards closed after pressing the Vote button we saw"
             break
         }
         v2 := SH_Text(xs[best] + 50, 408, 70, 32)

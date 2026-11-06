@@ -817,18 +817,35 @@ SH_Join() {
         }
         fm := SH_Find("find match", 150, 150, 500, 300)
         FixClick(fm ? fm.x : 464, fm ? fm.y : 310)
-        Sleep(800)
-        ; the captcha panel moved a little in the update, so look over the whole middle of the screen
-        code := "", cx := 400, cy := 284, sb := 0
-        for it in SH_Items(120, 100, 560, 380, 1.5) {
-            tt := StrReplace(StrReplace(it.t, "o", "0"), " ", "")
-            if (code = "" && RegExMatch(tt, "^\d{4,8}$", &m))
-                code := m[0], cx := it.x, cy := it.y
-            if InStr(it.t, "submit")
-                sb := it
+        ; [Fix 11-05] wait for the captcha box itself (green Submit + red Cancel side by side, by pixels)
+        ; instead of a fixed 0.8 s: on a slower PC it wasn't up yet, the number "wasn't read", the macro
+        ; pressed X and walked to the pad again - over and over
+        t0 := A_TickCount
+        while (A_TickCount - t0 < 6000 && !SH_CaptchaUp())
+            Sleep(250)
+        Sleep(300)                       ; let it finish popping in
+        ; the captcha panel moved a little in the update, so look over the whole middle of the screen.
+        ; [Fix 11-05] three readings at different zoom before giving up (one try used to be all)
+        code := "", cx := 400, cy := 284, sb := 0, seen := ""
+        for sc in [1.5, 2, 1] {
+            for it in SH_Items(120, 100, 560, 380, sc) {
+                tt := SH_CaptchaDigits(it.t)
+                if (code = "" && RegExMatch(tt, "^\d{4,8}$", &m))
+                    code := m[0], cx := it.x, cy := it.y
+                if InStr(it.t, "submit")
+                    sb := it
+                if (A_Index <= 12)
+                    seen .= it.t " | "
+            }
+            if (code != "")
+                break
+            seen .= " // "
+            Sleep(300)
         }
         if (code = "") {
             AddToLog("[Summer] Captcha not read - trying again")
+            SH_Log("join: captcha not read (box seen: " (SH_CaptchaUp() ? "yes" : "no") ") - read: " SubStr(seen, 1, 300))
+            SH_CaptchaPic()
             if SH_Queued()
                 return true
             FixClick(584, 190)   ; close
@@ -878,6 +895,66 @@ SH_Join() {
         AddToLog("[Summer] Matchmaking didn't start - trying again")
     }
     return false
+}
+
+; [Fix 11-05] the captcha box is up: green Submit (x 218-390) next to red Cancel (x 408-582), y 368-404.
+; On the saved pictures: the captcha 37 green + 21 red of 52 each; result screens have the green but no
+; red, the orange Hellish City ground has red but no green.
+SH_CaptchaUp() {
+    old := A_CoordModePixel
+    CoordMode("Pixel", "Client")
+    g := 0, r := 0
+    try {
+        for y in [374, 382, 390, 398] {
+            x := 232
+            while (x <= 380) {
+                c := PixelGetColor(x, y)
+                cr := (c >> 16) & 255, cg := (c >> 8) & 255, cb := c & 255
+                if (cg >= 150 && cr <= 130 && cb <= 100 && cg - cr >= 60)
+                    g += 1
+                x += 12
+            }
+            x := 420
+            while (x <= 570) {
+                c := PixelGetColor(x, y)
+                cr := (c >> 16) & 255, cg := (c >> 8) & 255, cb := c & 255
+                if (cr >= 170 && cg <= 80 && cb <= 80)
+                    r += 1
+                x += 12
+            }
+        }
+    }
+    CoordMode("Pixel", old)
+    return (g >= 20 && r >= 12)
+}
+
+; the captcha number as digits. The readers sometimes return look-alike letters in it ("99g0B8") - those
+; are swapped for digits, but only in a piece that already has 3 real digits (so words stay words)
+SH_CaptchaDigits(t) {
+    t := StrReplace(StrLower(t), " ", "")
+    if !RegExMatch(t, "\d.*\d.*\d")
+        return t
+    for a, b in Map("o", "0", "d", "0", "i", "1", "l", "1", "|", "1", "!", "1", "z", "2", "s", "5", "b", "8", "g", "9", "q", "9")
+        t := StrReplace(t, a, b)
+    return t
+}
+
+; [Proof] a picture of a captcha the macro couldn't read (Logs\CaptchaMiss, newest 10 kept)
+SH_CaptchaPic() {
+    try {
+        dir := A_ScriptDir "\Logs\CaptchaMiss"
+        DirCreate(dir)
+        list := ""
+        Loop Files dir "\*.bmp"
+            list .= A_LoopFileFullPath "`n"
+        if (list != "") {
+            arr := StrSplit(Sort(RTrim(list, "`n")), "`n")
+            while (arr.Length > 9)
+                FileDelete(arr.RemoveAt(1))
+        }
+        FT_GetOffset(&dx, &dy)
+        FindText().SavePic(dir "\" FormatTime(, "MMdd_HHmmss") ".bmp", offsetX + dx, offsetY + dy, offsetX + dx + 830, offsetY + dy + 660, 1)
+    }
 }
 
 ; searching for a game, loading into one, or already in it

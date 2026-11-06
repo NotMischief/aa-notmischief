@@ -736,7 +736,45 @@ SH_BoardNow() {
 }
 
 ; ---- getting into a match: walk to the pad, then Play Here / Find Match (+ captcha) -------------
-SH_PanelVisible() => RegExMatch(SH_Text(150, 150, 500, 300), "join matchmaking|play here|find match") ? true : false
+SH_PanelVisible() => (SH_JoinPanelUp() || RegExMatch(SH_Text(150, 150, 500, 300), "join matchmaking|play here|find match")) ? true : false
+
+; [Fix 11-05] the "Join Matchmaking?" window by its colours: the green gamepad on Play Here and the cyan
+; "Matchmaking". Without the Python helper the built-in reading didn't recognise the window on your
+; friend's PC, so the macro pressed X, walked to the pad again, and again. On 824 saved pictures: the 20
+; with the window 53-55 green + 56-58 cyan (of 77 / 114), every other picture under 15 of one of them.
+SH_JoinPanelUp() {
+    old := A_CoordModePixel
+    CoordMode("Pixel", "Client")
+    g := 0, c := 0
+    try {
+        y := 300
+        while (y <= 336) {
+            x := 306
+            while (x <= 366) {
+                px := PixelGetColor(x, y)
+                r := (px >> 16) & 255, gg := (px >> 8) & 255, b := px & 255
+                if (gg >= 170 && r <= 130 && b <= 130 && gg - r >= 70)
+                    g += 1
+                x += 6
+            }
+            y += 6
+        }
+        if (g >= 40) {
+            for y in [230, 236, 242] {
+                x := 322
+                while (x <= 544) {
+                    px := PixelGetColor(x, y)
+                    r := (px >> 16) & 255, gg := (px >> 8) & 255, b := px & 255
+                    if (b >= 190 && gg >= 160 && r <= 110)
+                        c += 1
+                    x += 6
+                }
+            }
+        }
+    }
+    CoordMode("Pixel", old)
+    return (g >= 40 && c >= 40)
+}
 
 SH_EnterHunt() {
     StageGuard.Arm("Entrance", FW_EntranceTimeoutMs)

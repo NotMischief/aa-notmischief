@@ -36,7 +36,15 @@ VH_Start() {
     try FileDelete(dir "\resp_*.txt")
     script := A_ScriptDir "\Lib\Improved\vision_helper.py"
     args := ' "' script '" ' DllCall("GetCurrentProcessId") ' "' dir '"'
-    for exe in ["pyw -3", "pythonw", EnvGet("LOCALAPPDATA") "\Programs\Python\Python312\pythonw.exe", EnvGet("LOCALAPPDATA") "\Programs\Python\Python313\pythonw.exe"] {
+    tries := ["pyw -3", "pythonw", EnvGet("LOCALAPPDATA") "\Programs\Python\Python312\pythonw.exe", EnvGet("LOCALAPPDATA") "\Programs\Python\Python313\pythonw.exe"]
+    ; [Fix 11-05] the setup now writes down the Python it installed the packages into (Settings\Python.txt).
+    ; Use that one first: "pyw -3" takes the NEWEST Python, which may have no packages (your friend's 3.15).
+    try {
+        own := Trim(FileRead(A_ScriptDir "\Settings\Python.txt"), " `t`r`n")
+        if (own != "" && FileExist(own))
+            tries.InsertAt(1, '"' own '"')
+    }
+    for exe in tries {
         try {
             Run(exe . args, A_ScriptDir, "Hide", &pid)
             st.pid := pid

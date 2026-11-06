@@ -170,9 +170,10 @@ SH_CardsUp() {
     CoordMode("Pixel", "Client")
     up := false
     try {
+        pic := SH_Grab(224, 380, 577, 400)   ; [Speed 11-05] one picture, then its pixels
         d := 0
         for pt in [[224, 380], [400, 380], [577, 380], [224, 400], [400, 400], [577, 400]] {
-            c := PixelGetColor(pt[1], pt[2])
+            c := SH_Px(pic, pt[1], pt[2])
             if (((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255) < 150)
                 d += 1
         }
@@ -183,6 +184,41 @@ SH_CardsUp() {
     }
     CoordMode("Pixel", old)
     return up
+}
+
+; [Speed 11-05] one picture of a small area, then its pixels read from memory. PixelGetColor asks Windows
+; for every single pixel (with the desktop compositor that can cost milliseconds each), and the checks added
+; lately read 9-104 pixels each, some several times a second.
+SH_Grab(x1, y1, x2, y2) {          ; client coordinates (like FixClick) - read the pixels with SH_Px
+    ox := 0, oy := 0
+    try WinGetClientPos(&ox, &oy, , , rblxID)
+    ft := FindText()
+    ft.ScreenShot(ox + x1, oy + y1, ox + x2, oy + y2)
+    return {ft: ft, ox: ox, oy: oy}
+}
+SH_Px(pic, x, y) => g.ft.GetColor(g.ox + x, g.oy + y, 0) & 0xFFFFFF
+
+; [Speed] once per run: how long the two ways of reading pixels take on this PC (in the log)
+SH_PixelSpeedLog() {
+    static done := false
+    if done
+        return
+    done := true
+    try {
+        old := A_CoordModePixel
+        CoordMode("Pixel", "Client")
+        t := A_TickCount
+        loop 20
+            PixelGetColor(300 + A_Index, 300)
+        one := A_TickCount - t
+        CoordMode("Pixel", old)
+        t := A_TickCount
+        pic := SH_Grab(300, 300, 320, 300)
+        loop 20
+            SH_Px(pic, 300 + A_Index, 300)
+        fromPic := A_TickCount - t
+        AddToLog("[Speed] 20 pixels read one by one: " one " ms - from one picture: " fromPic " ms")
+    }
 }
 
 ; [Cards watch 11-04] the card vote only lasts ~10 s, and it used to be looked for only BETWEEN placing /
@@ -211,6 +247,7 @@ SH_CardWatch() {
             SH_CardsSeenAt := 0
             return
         }
+        SH_PixelSpeedLog()
         if !SH_CardsUp() {
             SH_CardsSeenAt := 0, fails := 0
             return
@@ -263,10 +300,11 @@ SH_MatchBar() {
     CoordMode("Pixel", "Client")
     n := 0
     try {
+        pic := SH_Grab(180, 58, 620, 64)   ; [Speed 11-05] one picture, then its pixels
         x := 180
         while (x <= 620) {
             for y in [58, 61, 64] {
-                c := PixelGetColor(x, y)
+                c := SH_Px(pic, x, y)
                 r := (c >> 16) & 255, g := (c >> 8) & 255, b := c & 255
                 if ((g >= 150 && r <= 120 && b <= 120) || (r >= 150 && g <= 80 && b <= 80)) {
                     n += 1
@@ -428,11 +466,12 @@ SH_VoteUp() {
     CoordMode("Pixel", "Client")
     n := 0, sx := 0, sy := 0
     try {
+        pic := SH_Grab(300, 488, 396, 504)   ; [Speed 11-05] one picture, then its pixels
         y := 488
         while (y <= 504) {
             x := 300
             while (x <= 396) {
-                c := PixelGetColor(x, y)
+                c := SH_Px(pic, x, y)
                 r := (c >> 16) & 255, g := (c >> 8) & 255, b := c & 255
                 if (g >= 140 && r <= 110 && b <= 70 && g - r >= 80)
                     n += 1, sx += x, sy += y
@@ -500,11 +539,12 @@ SH_NextBtnUp() {
     CoordMode("Pixel", "Client")
     n := 0
     try {
+        pic := SH_Grab(296, 386, 360, 404)   ; [Speed 11-05] one picture, then its pixels
         y := 386
         while (y <= 404) {
             x := 296
             while (x <= 360) {
-                c := PixelGetColor(x, y)
+                c := SH_Px(pic, x, y)
                 r := (c >> 16) & 255, g := (c >> 8) & 255, b := c & 255
                 if (g >= 150 && r <= 130 && b <= 100 && g - r >= 60)
                     n += 1
@@ -747,11 +787,12 @@ SH_JoinPanelUp() {
     CoordMode("Pixel", "Client")
     g := 0, c := 0
     try {
+        pic := SH_Grab(306, 230, 544, 336)   ; [Speed 11-05] one picture, then its pixels
         y := 300
         while (y <= 336) {
             x := 306
             while (x <= 366) {
-                px := PixelGetColor(x, y)
+                px := SH_Px(pic, x, y)
                 r := (px >> 16) & 255, gg := (px >> 8) & 255, b := px & 255
                 if (gg >= 170 && r <= 130 && b <= 130 && gg - r >= 70)
                     g += 1
@@ -763,7 +804,7 @@ SH_JoinPanelUp() {
             for y in [230, 236, 242] {
                 x := 322
                 while (x <= 544) {
-                    px := PixelGetColor(x, y)
+                    px := SH_Px(pic, x, y)
                     r := (px >> 16) & 255, gg := (px >> 8) & 255, b := px & 255
                     if (b >= 190 && gg >= 160 && r <= 110)
                         c += 1
@@ -943,10 +984,11 @@ SH_CaptchaUp() {
     CoordMode("Pixel", "Client")
     g := 0, r := 0
     try {
+        pic := SH_Grab(232, 374, 570, 398)   ; [Speed 11-05] one picture, then its pixels
         for y in [374, 382, 390, 398] {
             x := 232
             while (x <= 380) {
-                c := PixelGetColor(x, y)
+                c := SH_Px(pic, x, y)
                 cr := (c >> 16) & 255, cg := (c >> 8) & 255, cb := c & 255
                 if (cg >= 150 && cr <= 130 && cb <= 100 && cg - cr >= 60)
                     g += 1
@@ -954,7 +996,7 @@ SH_CaptchaUp() {
             }
             x := 420
             while (x <= 570) {
-                c := PixelGetColor(x, y)
+                c := SH_Px(pic, x, y)
                 cr := (c >> 16) & 255, cg := (c >> 8) & 255, cb := c & 255
                 if (cr >= 170 && cg <= 80 && cb <= 80)
                     r += 1

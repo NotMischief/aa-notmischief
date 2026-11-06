@@ -41,12 +41,13 @@ AB_Toggle() {
     CoordMode("Pixel", "Client")
     lN := 0, lG := 0, rN := 0, rG := 0, n := 0
     try {
+        pic := SH_Grab(294, 263, 342, 275)   ; [Speed 11-05] one picture, then its pixels
         y := 263
         while (y <= 275) {
             x := 0
             while (x <= 18) {
                 for side in [0, 1] {
-                    c := PixelGetColor((side ? 324 : 294) + x, y)
+                    c := SH_Px(pic, (side ? 324 : 294) + x, y)
                     r := (c >> 16) & 255, g := (c >> 8) & 255, b := c & 255
                     v := (r + g + b) / 3
                     neut := (Abs(r - g) < 9 && Abs(g - b) < 9 && v >= 14 && v <= 45)

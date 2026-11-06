@@ -196,7 +196,7 @@ SH_Grab(x1, y1, x2, y2) {          ; client coordinates (like FixClick) - read t
     ft.ScreenShot(ox + x1, oy + y1, ox + x2, oy + y2)
     return {ft: ft, ox: ox, oy: oy}
 }
-SH_Px(pic, x, y) => g.ft.GetColor(g.ox + x, g.oy + y, 0) & 0xFFFFFF
+SH_Px(pic, x, y) => pic.ft.GetColor(pic.ox + x, pic.oy + y, 0) & 0xFFFFFF
 
 ; [Speed] once per run: how long the two ways of reading pixels take on this PC (in the log)
 SH_PixelSpeedLog() {

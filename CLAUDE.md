@@ -27,6 +27,8 @@ to this one, read it too — it has the owner's paths, history and open tasks (i
   `else`). Use braces around if/else bodies that contain `try`.
 - Click coordinates are **client** coords of the 800x600 Roblox picture; FindText (`FT`) coords are ~31 px lower.
 - Files are UTF-8 **with BOM**; most use LF, some CRLF — keep whatever the file already uses.
+- A variable that is only read, never assigned, in a function raises a `#Warn` box at load ("local variable
+  appears to never be assigned"). After any rename/replace, check the function's own definition line too.
 - Validate syntax with AutoHotkey itself: `AutoHotkey64.exe /ErrorStdOut /validate Main.ahk` (Windows).
 
 ## Layout

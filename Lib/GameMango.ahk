@@ -830,6 +830,9 @@ RestartStage() {
         currentMap := (!inChallengeMode && ModeDropdown.Text = "Fool's Hunt") ? DetectHuntMap() : SH_On() ? DetectHuntMap(20000) : DetectMapImageSearch()
     }
     CP_SetStageMap(currentMap)
+    ; [Fix 11-06] forget last round's map first: when this round's map isn't recognised, F10 used to save
+    ; your new walk under the PREVIOUS map's name (and replace that map's walk)
+    try ST_S().map := "-"
     try ST_SetMap(currentMap)   ; [Polish] stats strip
 
     ; Only freeze client in actual Fool's Hunt runs (never during Auto Challenge)

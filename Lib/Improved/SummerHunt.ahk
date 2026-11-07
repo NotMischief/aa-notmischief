@@ -1129,6 +1129,19 @@ SH_RecordNow() {
         }
         m := SH_CanonMap(Trim(ib.Value))
         try ST_SetMap(m)
+    } else {
+        ; [Fix 11-06] show which map the walk will be saved for - Enter (or 8 s) keeps it, or type the right one.
+        ; The walk is replayed every time the macro recognises this name, so a wrong name would give
+        ; another map's walk to this one.
+        ib := InputBox("Record a walk for " m "?`nEnter keeps this name - if it's the wrong map, type the right one.", "Record walk - which map?", "w380 h150 T8", m)
+        if (ib.Result = "Cancel") {
+            AddToLog("[Record walk] Cancelled")
+            return
+        }
+        if (ib.Result = "OK" && Trim(ib.Value) != "" && Trim(ib.Value) != m) {
+            m := SH_CanonMap(Trim(ib.Value))
+            try ST_SetMap(m)
+        }
     }
     ; start from the same spot the replay starts from: the macro teleports to spawn before every walk
     AddToLog("[Record walk] Teleporting to spawn first...")

@@ -10,10 +10,13 @@ class MacroStop extends Error {
 
 class StageGuard {
     static triggers := []   ; A_TickCount of each counted failsafe trigger
+    static extended := 0    ; [Summer] times the stage deadline was moved for a match still running
 
     ; Start (or restart) the deadline. ms <= 0 or failsafes off -> guard cleared.
     static Arm(name, ms) {
         global FW_FailsafesEnabled
+        if (name = "Stage")
+            this.extended := 0
         if (!FW_FailsafesEnabled || ms <= 0) {
             TimerManager.Clear(name)
             return
@@ -29,6 +32,26 @@ class StageGuard {
     static Check(name, reason := "", counted := true) {
         if (!MacroLoopState.Active || !TimerManager.HasExpired(name))
             return
+        ; [Summer 11-08] a Summer Hunt match can run past 45 minutes (wins at 34-42 min were seen), and
+        ; rejoining = leaving a matchmaking game early. While the match is clearly still on screen (base
+        ; health bar or wave counter) wait 10 more minutes, up to 3 times (75 min). A match on screen
+        ; always ends by itself; a real hang (wrong screen) has neither and is still rescued.
+        if (name = "Stage" && this.extended < 3) {
+            running := false, wave := 0
+            try {
+                if (SH_On()) {
+                    wave := DG_Wave()
+                    running := wave > 0 || SH_MatchBar()
+                }
+            }
+            if (running) {
+                this.extended += 1
+                TimerManager.Start(name, 10 * 60000)
+                FW_Log("[Failsafe] Stage running long but the match is still on" (wave ? " (wave " wave ")" : "")
+                    . " - waiting 10 more minutes (" this.extended "/3)")
+                return
+            }
+        }
         TimerManager.Clear(name)
         FW_Log("[Failsafe] " name " timeout" (reason != "" ? " (" reason ")" : "") " - rejoining")
         if (counted)

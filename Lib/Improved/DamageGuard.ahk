@@ -98,6 +98,7 @@ DG_ReadBoard() {
 
 ; called every second from MonitorStage in Summer Hunt
 DG_Tick() {
+    static dgMiss := 0, dgWarnAt := 0
     if (!SH_On() || !DG_On())
         return
     s := DG_S()
@@ -152,8 +153,17 @@ DG_Tick() {
     s.board := "📊 Damage at wave " s.wave ":`n" brd, s.boardAt := A_TickCount
     if (!myRank) {
         SH_Log("damage: didn't find '" me "' in the list")
+        ; [11-08] the usual reason: playing on another account with the old Name= (it then never decides) -
+        ; say so in the main log after 3 misses in a row, at most every 30 minutes. Only writes to the log.
+        dgMiss += 1
+        if (dgMiss >= 3 && (!dgWarnAt || A_TickCount - dgWarnAt > 1800000)) {
+            dgWarnAt := A_TickCount, dgMiss := 0
+            AddToLog("[Damage guard] Your name '" me "' isn't in the player list - playing on another account? "
+                . "Put that name in Settings\DamageGuard.txt (Name=...), the guard can't act without it")
+        }
         return
     }
+    dgMiss := 0
     ; [Zero damage] from wave ZeroLeaveWave (20) on, still exactly 0 damage on two readings in a row means
     ; no unit is doing anything (wrong place, nothing placed) - leave and start fresh instead of wasting
     ; the match. ZeroLeaveWave=0 turns it off.

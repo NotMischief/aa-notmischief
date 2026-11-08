@@ -47,7 +47,8 @@ to this one, read it too — it has the owner's paths, history and open tasks (i
   (`req_*.txt` -> `resp_*.txt`). Commands: ocr, find, place, base, hover, fail, print, mini, forget, nomoney, count (hotbar "placed/max"
   label by digit shapes - templates for 0-3 from 50 hover pictures; `PL_SlotCount` falls back to OCR).
   Debug pictures go to `Logs\vision_ipc\pics` (newest 300 kept).
-- `Lib/Improved/VisionHelper.ahk` — AHK side of the IPC (2 slow answers in a row -> built-in OCR for 20 s).
+- `Lib/Improved/VisionHelper.ahk` — AHK side of the IPC (2 slow answers in a row -> built-in OCR for 20 s;
+  `Settings\PythonWait.txt` = wait N times longer on a slow PC; time-outs and late answers are logged).
 - `Lib/Improved/WatchMode.ahk` — F9: picture every 10 s; reloads in the lobby when code changed and resumes.
 - `Lib/Improved/AutoUpdate.ahk` — checks this repo's `VERSION.txt` at start-up and in the lobby; replaces
   code only; keeps 3 backups. `Settings\AutoUpdate.txt`: Auto (default) / Ask / Off.

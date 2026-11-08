@@ -617,6 +617,111 @@ def cmd_forget(a: dict) -> dict:
     return {"ok": "1", "info": "forgot " + key}
 
 
+# ---- [Count] the "placed/max" label above the held unit's hotbar card ("1/3"), read by the SHAPES of its
+# white digits. OCR read it right ~5% of the time (it sits on top of the card's "Lv." text), so the macro
+# kept trying units that were already at their limit. Templates made from 50 saved hover pictures:
+# 50/50 right, 0 false reads on 250 other cards and ~130 watch pictures, ~1 ms. Only 0-3 are known;
+# anything unsure -> no answer (the macro then uses OCR as before).
+_COUNT_T = {
+    "/": [
+        "00000000000000", "00000011000000", "00000011100000", "00000111100000",
+        "00000111000000", "00001111000000", "00001110000000", "00011100000000",
+        "00011100000000", "00111100000000", "00111000000000", "01110000000000",
+        "01110000000000", "01100000000000", "01100000000000", "00000000000000",
+    ],
+    "0": [
+        "00000000000000", "00001111000000", "00111111110000", "00111111110000",
+        "01111001111000", "01110000111000", "01110000111000", "01110000111000",
+        "01110000111000", "01111001111000", "00111111110000", "00111111110000",
+        "00001111000000", "00000000000000", "00000000000000", "00000000000000",
+    ],
+    "1": [
+        "00000000000000", "00000110000000", "00011110000000", "00111110000000",
+        "01111110000000", "01111110000000", "00001110000000", "00001110000000",
+        "00001110000000", "00001110000000", "00001110000000", "00001110000000",
+        "00001110000000", "00000000000000", "00000000000000", "00000000000000",
+    ],
+    "2": [
+        "00000000000000", "00001111000000", "00111111100000", "01111111110000",
+        "01110001110000", "01110001110000", "00100011110000", "00000111100000",
+        "00001111100000", "00111110000000", "01111111111000", "01111111111000",
+        "00111111111000", "00000000000000", "00000000000000", "00000000000000",
+    ],
+    "3": [
+        "00000000000000", "00011111000000", "00111111100000", "01111111110000",
+        "00110001110000", "00001111110000", "00001111100000", "00001111110000",
+        "01100001110000", "01110001110000", "01111111110000", "00111111100000",
+        "00011111000000", "00000000000000", "00000000000000", "00000000000000",
+    ],
+}
+_COUNT_M = {k: np.array([[c == "1" for c in row] for row in v], np.uint8) for k, v in _COUNT_T.items()}
+_COUNT_MISS = [0.0]
+
+
+def _count_glyph(m: np.ndarray) -> tuple:
+    """(best overlap, best char, 2nd best overlap) for one glyph, trying 0-2 px shifts"""
+    res = []
+    for ch, tm in _COUNT_M.items():
+        best = 0.0
+        for dx in (0, 1, 2):
+            for dy in (0, 1, 2):
+                c = np.zeros((16, 14), np.uint8)
+                mm = m[:16 - dy, :14 - dx]
+                c[dy:dy + mm.shape[0], dx:dx + mm.shape[1]] = mm
+                u = int((tm | c).sum())
+                if u:
+                    best = max(best, int((tm & c).sum()) / u)
+        res.append((best, ch))
+    res.sort(reverse=True)
+    return res[0][0], res[0][1], res[1][0]
+
+
+def read_count(img: np.ndarray) -> tuple:
+    """img: BGR box at client (card x0 - 6, 496), 76 x 40. -> ((placed, max), info) or (None, why)"""
+    mn = img.min(axis=2).astype(np.int32)              # white text: all three colours high
+    hi = float(np.percentile(mn, 99))
+    if hi < 90:
+        return None, f"no white text (top {hi:.0f})"
+    m = (mn >= max(70.0, hi * 0.55)).astype(np.uint8)  # relative: the screen can be dimmed / tinted
+    n, lab, st, _ = cv2.connectedComponentsWithStats(m, 8)
+    parts = []
+    for i in range(1, n):
+        x, y, w, h, a = (int(v) for v in st[i])
+        if 10 <= h <= 16 and 2 <= w <= 13 and a >= 12:
+            sc, ch, sc2 = _count_glyph((lab[y:y + h, x:x + w] == i).astype(np.uint8))
+            parts.append((x, y, w, h, sc, ch, sc2))
+    for s in sorted((p for p in parts if p[5] == "/" and p[4] >= 0.75 and p[4] - p[6] >= 0.2), key=lambda p: -p[4]):
+        def side(left: bool):
+            c = [p for p in parts if p is not s and abs(p[1] - (s[1] + 1)) <= 2 and
+                 (-2 <= s[0] - (p[0] + p[2]) <= 4 if left else -2 <= p[0] - (s[0] + s[2]) <= 4)]
+            return max(c, key=lambda p: p[4]) if c else None
+        a, b = side(True), side(False)
+        if not a or not b:
+            continue
+        if any(p[5] not in "0123" or p[4] < 0.78 or p[4] - p[6] < 0.08 for p in (a, b)):
+            return None, "digits unsure: " + " ".join(f"{p[5]}:{p[4]:.2f}/{p[6]:.2f}" for p in (a, b))
+        # a two-digit number would have another glyph right beside it - not supported, don't guess
+        if any(p is not a and p is not b and p is not s and abs(p[1] - a[1]) <= 2 and
+               (-2 <= a[0] - (p[0] + p[2]) <= 3 or -2 <= p[0] - (b[0] + b[2]) <= 3) for p in parts):
+            return None, "more digits than expected"
+        pa, pb = int(a[5]), int(b[5])
+        if pb < 1 or pa > pb:
+            return None, f"impossible {pa}/{pb}"
+        return (pa, pb), f"{pa}/{pb} (match {a[4]:.2f} {s[4]:.2f} {b[4]:.2f})"
+    return None, "no label"
+
+
+def cmd_count(a: dict) -> dict:
+    img = grab(int(a["x"]), int(a["y"]), 76, 40)
+    r, info = read_count(img)
+    if r is None:
+        if info.startswith("digits unsure") and time.time() - _COUNT_MISS[0] > 30:   # pictures to teach it new digits
+            _COUNT_MISS[0] = time.time()
+            cv2.imwrite(_pic(time.strftime("count_%H%M%S_unsure.png")), img)
+        return {"ok": "0", "info": info}
+    return {"ok": "1", "a": str(r[0]), "b": str(r[1]), "info": info}
+
+
 def handle(a: dict) -> dict:
     c = a.get("cmd")
     if c == "ping":
@@ -641,6 +746,8 @@ def handle(a: dict) -> dict:
         return cmd_base(a)
     if c == "hover":
         return cmd_hover(a)
+    if c == "count":
+        return cmd_count(a)
     if c == "quit":
         raise SystemExit
     return {"ok": "0", "info": "unknown command"}

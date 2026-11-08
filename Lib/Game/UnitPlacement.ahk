@@ -502,12 +502,41 @@ PL_NoteTryFailed(slot, x, y) {
         PL_FailSpots[slot].RemoveAt(1)
 }
 
+; how many placements are set for this slot in the macro (the same setting PlacingUnits uses); 3 if unknown
+PL_SlotTarget(slot) {
+    global inChallengeMode, ChallengeBox
+    try {
+        nm := (inChallengeMode && ChallengeBox.Value ? "challengeplacement" : GetNameForMode() "placement") slot
+        return Integer(%nm%.Text)
+    }
+    return 3
+}
+
 ; [Count] "placed/max" shown above the held unit's hotbar card (e.g. "0/3"). Returns [placed, max] or 0.
 PL_SlotCount(slot) {
     if (slot < 1 || slot > 6)
         return 0
     x0 := 212 + 64 * (slot - 1)
     global PL_LastCountText
+    ; [Count by shape 11-07] the Python helper matches the label's white digits by their shapes - the OCR below
+    ; read it right only ~5% of the time (it sits on the card's "Lv." text), so units at their limit were tried
+    ; again and again. It knows the digits 0-3 only: not used for a slot set to more than 3 placements, and
+    ; when it isn't sure (or Python isn't running) the OCR below is used as before.
+    if (PL_SlotTarget(slot) <= 3) {
+        cox := 0, coy := 0
+        try WinGetClientPos(&cox, &coy, , , rblxID)
+        loop 2 {
+            cr := 0
+            try cr := VH_Call(Format("cmd=count`nx={}`ny={}", cox + x0 - 6, coy + 496), 1000)
+            if (cr && cr.Has("ok") && cr["ok"] = "1") {
+                PL_LastCountText := "shape " cr["a"] "/" cr["b"]
+                return [Integer(cr["a"]), Integer(cr["b"])]
+            }
+            if (!cr)
+                break        ; no Python helper right now
+            Sleep(80)        ; the card may still be rising - one more look
+        }
+    }
     ; two readers: the quick line reader on the label, then the full text finder on a wider box
     ; (the line reader came back empty after some placements on Cursed Festival)
     loop 2 {

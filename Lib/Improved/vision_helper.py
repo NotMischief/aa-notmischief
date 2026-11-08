@@ -619,58 +619,65 @@ def cmd_forget(a: dict) -> dict:
 
 # ---- [Count] the "placed/max" label above the held unit's hotbar card ("1/3"), read by the SHAPES of its
 # white digits. OCR read it right ~5% of the time (it sits on top of the card's "Lv." text), so the macro
-# kept trying units that were already at their limit. Templates made from 50 saved hover pictures:
-# 50/50 right, 0 false reads on 250 other cards and ~130 watch pictures, ~1 ms. Only 0-3 are known;
-# anything unsure -> no answer (the macro then uses OCR as before).
-_COUNT_T = {
-    "/": [
-        "00000000000000", "00000011000000", "00000011100000", "00000111100000",
-        "00000111000000", "00001111000000", "00001110000000", "00011100000000",
-        "00011100000000", "00111100000000", "00111000000000", "01110000000000",
-        "01110000000000", "01100000000000", "01100000000000", "00000000000000",
-    ],
-    "0": [
-        "00000000000000", "00001111000000", "00111111110000", "00111111110000",
-        "01111001111000", "01110000111000", "01110000111000", "01110000111000",
-        "01110000111000", "01111001111000", "00111111110000", "00111111110000",
-        "00001111000000", "00000000000000", "00000000000000", "00000000000000",
-    ],
-    "1": [
-        "00000000000000", "00000110000000", "00011110000000", "00111110000000",
-        "01111110000000", "01111110000000", "00001110000000", "00001110000000",
-        "00001110000000", "00001110000000", "00001110000000", "00001110000000",
-        "00001110000000", "00000000000000", "00000000000000", "00000000000000",
-    ],
-    "2": [
-        "00000000000000", "00001111000000", "00111111100000", "01111111110000",
-        "01110001110000", "01110001110000", "00100011110000", "00000111100000",
-        "00001111100000", "00111110000000", "01111111111000", "01111111111000",
-        "00111111111000", "00000000000000", "00000000000000", "00000000000000",
-    ],
-    "3": [
-        "00000000000000", "00011111000000", "00111111100000", "01111111110000",
-        "00110001110000", "00001111110000", "00001111100000", "00001111110000",
-        "01100001110000", "01110001110000", "01111111110000", "00111111100000",
-        "00011111000000", "00000000000000", "00000000000000", "00000000000000",
-    ],
+# kept trying units that were already at their limit. Templates made from 50 saved hover pictures; each
+# digit is scored as it is (+-2 px) AND stretched to its usual size, because right after the unit is picked
+# up the card pops and the label is ~2 px taller. Tested: 50/50 saved + 7/7 live labels right, 0 false
+# reads on other cards / watch pictures, ~1 ms. Only 0-3 are known; unsure -> no answer (OCR as before).
+_COUNT_RAW = {   # 17 x 14, glyph placed at (1, 1)
+    "/": ["00000000000000", "00000011000000", "00000011100000", "00000111100000", "00000111000000", "00001111000000",
+          "00001110000000", "00011100000000", "00011100000000", "00111100000000", "00111000000000", "01110000000000",
+          "01110000000000", "01100000000000", "01100000000000", "00000000000000", "00000000000000",
+          ],
+    "0": ["00000000000000", "00001111000000", "00111111110000", "00111111110000", "01111001111000", "01110000111000",
+          "01110000111000", "01110000111000", "01110000111000", "01111001111000", "00111111110000", "00111111110000",
+          "00001111000000", "00000000000000", "00000000000000", "00000000000000", "00000000000000",
+          ],
+    "1": ["00000000000000", "00000110000000", "00011110000000", "00111110000000", "01111110000000", "01111110000000",
+          "00001110000000", "00001110000000", "00001110000000", "00001110000000", "00001110000000", "00001110000000",
+          "00001110000000", "00000000000000", "00000000000000", "00000000000000", "00000000000000",
+          ],
+    "2": ["00000000000000", "00001111000000", "00111111100000", "01111111110000", "01110001110000", "01110001110000",
+          "00100011110000", "00000111100000", "00001111100000", "00111110000000", "01111111111000", "01111111111000",
+          "00111111111000", "00000000000000", "00000000000000", "00000000000000", "00000000000000",
+          ],
+    "3": ["00000000000000", "00011111000000", "00111111100000", "01111111110000", "00110001110000", "00001111110000",
+          "00001111100000", "00001111110000", "01100001110000", "01110001110000", "01111111110000", "00111111100000",
+          "00011111000000", "00000000000000", "00000000000000", "00000000000000", "00000000000000",
+          ],
 }
-_COUNT_M = {k: np.array([[c == "1" for c in row] for row in v], np.uint8) for k, v in _COUNT_T.items()}
+_COUNT_SIZED = {   # each glyph stretched to its usual size (the label can be stretched while the card pops up)
+    "/": ["00000110", "00000111", "00001111", "00001110", "00011110", "00011100", "00111000", "00111000", "01111000", "01110000", "11100000", "11100000", "11000000", "11000000"],
+    "0": ["0001111000", "0111111110", "0111111110", "1111001111", "1110000111", "1110000111", "1110000111", "1110000111", "1111001111", "0111111110", "0111111110", "0001111000"],
+    "1": ["000011", "001111", "011111", "111111", "111111", "000111", "000111", "000111", "000111", "000111", "000111", "000111"],
+    "2": ["0001111000", "0111111100", "1111111110", "1110001110", "1110001110", "0100011110", "0000111100", "0001111100", "0111110000", "1111111111", "1111111111", "0111111111"],
+    "3": ["001111100", "011111110", "111111111", "011000111", "000111111", "000111110", "000111111", "110000111", "111000111", "111111111", "011111110", "001111100"],
+}
+_COUNT_R = {k: np.array([[c == "1" for c in row] for row in v], np.uint8) for k, v in _COUNT_RAW.items()}
+_COUNT_S = {k: np.array([[c == "1" for c in row] for row in v], np.uint8) for k, v in _COUNT_SIZED.items()}
 _COUNT_MISS = [0.0]
 
 
+def _iou(a: np.ndarray, b: np.ndarray) -> float:
+    u = int((a | b).sum())
+    return int((a & b).sum()) / u if u else 0.0
+
+
 def _count_glyph(m: np.ndarray) -> tuple:
-    """(best overlap, best char, 2nd best overlap) for one glyph, trying 0-2 px shifts"""
+    """(best score, best char, 2nd best score) for one glyph mask"""
+    h, w = m.shape
     res = []
-    for ch, tm in _COUNT_M.items():
+    for ch, raw in _COUNT_R.items():
         best = 0.0
-        for dx in (0, 1, 2):
+        for dx in (0, 1, 2):          # as it is, small shifts
             for dy in (0, 1, 2):
-                c = np.zeros((16, 14), np.uint8)
-                mm = m[:16 - dy, :14 - dx]
+                c = np.zeros(raw.shape, np.uint8)
+                mm = m[:raw.shape[0] - dy, :raw.shape[1] - dx]
                 c[dy:dy + mm.shape[0], dx:dx + mm.shape[1]] = mm
-                u = int((tm | c).sum())
-                if u:
-                    best = max(best, int((tm & c).sum()) / u)
+                best = max(best, _iou(raw, c))
+        sz = _COUNT_S[ch]             # stretched to the usual size (a very different shape still loses)
+        st = (cv2.resize(m.astype(np.float32), (sz.shape[1], sz.shape[0]), interpolation=cv2.INTER_AREA) >= 0.5).astype(np.uint8)
+        ar, tar = w / h, sz.shape[1] / sz.shape[0]
+        best = max(best, _iou(sz, st) * min(1.0, (min(ar, tar) / max(ar, tar)) / 0.8))
         res.append((best, ch))
     res.sort(reverse=True)
     return res[0][0], res[0][1], res[1][0]
@@ -687,10 +694,10 @@ def read_count(img: np.ndarray) -> tuple:
     parts = []
     for i in range(1, n):
         x, y, w, h, a = (int(v) for v in st[i])
-        if 10 <= h <= 16 and 2 <= w <= 13 and a >= 12:
+        if 10 <= h <= 17 and 2 <= w <= 14 and a >= 12:
             sc, ch, sc2 = _count_glyph((lab[y:y + h, x:x + w] == i).astype(np.uint8))
             parts.append((x, y, w, h, sc, ch, sc2))
-    for s in sorted((p for p in parts if p[5] == "/" and p[4] >= 0.75 and p[4] - p[6] >= 0.2), key=lambda p: -p[4]):
+    for s in sorted((p for p in parts if p[5] == "/" and p[4] >= 0.72 and p[4] - p[6] >= 0.2), key=lambda p: -p[4]):
         def side(left: bool):
             c = [p for p in parts if p is not s and abs(p[1] - (s[1] + 1)) <= 2 and
                  (-2 <= s[0] - (p[0] + p[2]) <= 4 if left else -2 <= p[0] - (s[0] + s[2]) <= 4)]
@@ -698,7 +705,7 @@ def read_count(img: np.ndarray) -> tuple:
         a, b = side(True), side(False)
         if not a or not b:
             continue
-        if any(p[5] not in "0123" or p[4] < 0.78 or p[4] - p[6] < 0.08 for p in (a, b)):
+        if any(p[5] not in "0123" or p[4] < 0.74 or p[4] - p[6] < 0.10 for p in (a, b)):
             return None, "digits unsure: " + " ".join(f"{p[5]}:{p[4]:.2f}/{p[6]:.2f}" for p in (a, b))
         # a two-digit number would have another glyph right beside it - not supported, don't guess
         if any(p is not a and p is not b and p is not s and abs(p[1] - a[1]) <= 2 and

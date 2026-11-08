@@ -106,9 +106,45 @@ SH_Text(x, y, w, h) {
 }
 
 SH_Find(regex, x := 0, y := 0, w := 800, h := 600) {
-    for it in SH_Items(x, y, w, h)
+    items := SH_Items(x, y, w, h)
+    for it in items
         if RegExMatch(it.t, regex)
             return it
+    ; [Fix 11-07] without the Python helper, Windows OCR gives single WORDS, so a phrase like "return to lobby"
+    ; never matched and the end-screen button was never found. Also try 2-4 neighbouring words on one line;
+    ; the click goes to the middle of just those words (not the whole line, which may hold another button).
+    lines := []
+    for it in items {
+        placed := false
+        for ln in lines {
+            if (Abs(ln[1].y - it.y) <= 8) {
+                ln.Push(it), placed := true
+                break
+            }
+        }
+        if !placed
+            lines.Push([it])
+    }
+    for ln in lines {
+        i := 2
+        while (i <= ln.Length) {   ; left to right
+            j := i
+            while (j > 1 && ln[j - 1].x > ln[j].x) {
+                tmp := ln[j - 1], ln[j - 1] := ln[j], ln[j] := tmp
+                j -= 1
+            }
+            i += 1
+        }
+        loop ln.Length {
+            s := A_Index, t := ""
+            loop Min(4, ln.Length - s + 1) {
+                k := s + A_Index - 1
+                t .= (A_Index = 1 ? "" : " ") ln[k].t
+                if (A_Index >= 2 && RegExMatch(t, regex))
+                    return {t: t, x: Round((ln[s].x + ln[k].x) / 2), y: ln[s].y}
+            }
+        }
+    }
     return 0
 }
 
@@ -574,14 +610,30 @@ SH_Result() {
 
 ; Next -> then "Return to lobby" or "Replay". Returns "lobby", "replay" or "".
 SH_EndButtons() {
+    static misses := 0, lastMiss := 0
     if (nx := SH_Find("^next$", 150, 300, 500, 150)) {
         FixClick(nx.x, nx.y)
         Sleep(1500)
     }
     lob := SH_Find("return to lobby|back to lobby", 100, 60, 600, 120)
     rep := SH_Find("^replay$", 100, 60, 600, 120)
-    if (!lob && !rep)
-        return ""
+    if (!lob && !rep) {
+        ; [Fix 11-07] the buttons can't always be read (no Python helper on a slow PC): it used to wait here
+        ; silently until the 5-minute safety rejoin. After 6 misses in a row (~25 s) click where they always are.
+        if (A_TickCount - lastMiss > 20000)
+            misses := 0
+        misses += 1, lastMiss := A_TickCount
+        if (misses < 6)
+            return ""
+        misses := 0
+        SH_Log("end: couldn't read Next / Return to lobby 6 times - clicking where they usually are")
+        AddToLog("[Summer] Couldn't read the end-screen buttons - clicking where Return to lobby usually is")
+        FixClick(320, 395)   ; Next (bottom middle)
+        Sleep(1500)
+        FixClick(312, 120)   ; Return to lobby (top left)
+        return "lobby"
+    }
+    misses := 0
     ; [Watch mode] new fixes waiting -> go through the lobby so they load (Replay never visits the lobby)
     fixes := false
     try fixes := WM_On() && WM_CodeStamp() > WM_S().baseline
@@ -594,10 +646,12 @@ SH_EndButtons() {
     if (ReturnLobbyBox.Value || !rep || (fixes && lob) || (pend && lob)) {
         FixClick(lob ? lob.x : 312, lob ? lob.y : 120)
         SH_Log("end: Return to lobby")
+        AddToLog("[Summer] End screen: Return to lobby")
         return "lobby"
     }
     FixClick(rep.x, rep.y)
     SH_Log("end: Replay")
+    AddToLog("[Summer] End screen: Replay")
     return "replay"
 }
 

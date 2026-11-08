@@ -61,7 +61,28 @@ def parent_alive() -> bool:
         k32.CloseHandle(h)
 
 
+def no_throttle() -> str:
+    """[Slow PC] Windows may run a hidden background process like this one on slow power-saving cores
+    ("efficiency mode" / power throttling), which makes every answer several times slower. Opt out."""
+    if os.name != "nt":
+        return "not Windows"
+
+    class _State(ctypes.Structure):
+        _fields_ = [("Version", ctypes.c_ulong), ("ControlMask", ctypes.c_ulong), ("StateMask", ctypes.c_ulong)]
+
+    try:
+        k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.GetCurrentProcess.restype = ctypes.c_void_p
+        k.SetProcessInformation.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong]
+        st = _State(1, 1, 0)  # version 1, EXECUTION_SPEED, 0 = never throttle
+        ok = k.SetProcessInformation(k.GetCurrentProcess(), 4, ctypes.byref(st), ctypes.sizeof(st))  # 4 = ProcessPowerThrottling
+        return "full speed" if ok else f"could not opt out (error {ctypes.get_last_error()})"
+    except Exception as e:  # older Windows - nothing to do
+        return f"could not opt out ({e})"
+
+
 log(f"helper process up (python {sys.version.split()[0]}) - loading libraries")
+log("power throttling: " + no_throttle())
 try:
     import numpy as np  # noqa: E402
     import cv2  # noqa: E402
@@ -671,6 +692,11 @@ def main() -> None:
         for n in names:
             rid = n[4:-4]
             path = os.path.join(IPC, n)
+            t0 = time.perf_counter()
+            try:
+                waited = int(max(0.0, time.time() - os.path.getmtime(path)) * 1000)  # in the queue before we got to it
+            except OSError:
+                waited = 0
             try:
                 with open(path, encoding="utf-8") as fh:
                     args = dict(l.split("=", 1) for l in fh.read().splitlines() if "=" in l)
@@ -685,6 +711,10 @@ def main() -> None:
             except Exception as e:
                 out = {"ok": "0", "info": "error: " + str(e).replace("\n", " ")}
                 log(traceback.format_exc())
+            ms = int((time.perf_counter() - t0) * 1000)
+            out["ms"] = str(ms)
+            if ms >= 800 or waited >= 500:  # [Slow PC] write down slow answers so the logs show what is slow
+                log(f"slow answer: {args.get('cmd', '?')} took {ms} ms (waited {waited} ms before it started)")
             tmp = os.path.join(IPC, f"resp_{rid}.tmp")
             with open(tmp, "w", encoding="utf-8") as fh:
                 fh.write("\n".join(f"{k}={v}" for k, v in out.items()))

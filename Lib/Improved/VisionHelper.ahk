@@ -87,6 +87,10 @@ VH_Call(lines, timeoutMs := 3000) {
     n += 1
     id := A_TickCount "_" n
     dir := VH_Dir()
+    VH_CheckLate(st, dir)
+    ; [Slow PC] Settings\PythonWait.txt = how many times longer to wait for Python's answers (1 to 10, default 1)
+    timeoutMs := Round(timeoutMs * VH_WaitFactor())
+    cmdName := RegExMatch(lines, "cmd=(\w+)", &cm) ? cm[1] : "?"
     try {
         FileAppend(lines, dir "\req_" id ".tmp", "UTF-8-RAW")
         FileMove(dir "\req_" id ".tmp", dir "\req_" id ".txt", 1)
@@ -100,7 +104,12 @@ VH_Call(lines, timeoutMs := 3000) {
             ; [Softer] one slow answer (busy PC, a big picture) used to switch Python off for a whole minute -
             ; right in the middle of the lobby walk. Now it takes two slow answers in a row, and only 20 s off.
             st.slow := (st.HasOwnProp("slow") ? st.slow : 0) + 1
+            taken := !FileExist(dir "\req_" id ".txt")   ; Python took the job but didn't finish in time
             try FileDelete(dir "\req_" id ".txt")
+            AddToLog("[Vision] Python gave no answer to '" cmdName "' within " timeoutMs " ms - "
+                . (taken ? "it was still working on it" : "it was still busy with an earlier job"))
+            if (taken)
+                st.late := {id: id, cmd: cmdName, at: start}
             if (st.slow >= 2) {
                 st.failUntil := A_TickCount + 20000, st.slow := 0
                 AddToLog("[Vision] Python helper was slow twice - using the built-in reading for 20 s")
@@ -118,6 +127,42 @@ VH_Call(lines, timeoutMs := 3000) {
         FileDelete(resp)
     }
     return out
+}
+
+; [Slow PC] how many times longer to wait for Python (Settings\PythonWait.txt, 1 to 10; default 1)
+VH_WaitFactor() {
+    static f := 0
+    if (f = 0) {
+        f := 1
+        try {
+            v := Trim(FileRead(A_ScriptDir "\Settings\PythonWait.txt"), " `t`r`n" Chr(0xFEFF))
+            if (IsNumber(v) && v >= 1 && v <= 10)
+                f := v + 0
+        }
+        if (f != 1)
+            AddToLog("[Vision] Waiting " f "x longer for Python's answers (Settings\PythonWait.txt)")
+    }
+    return f
+}
+
+; [Slow PC] a job that timed out may still be answered later: write down how long it really took
+; (so the logs show how slow Python is on this PC) and clean the answer file up.
+VH_CheckLate(st, dir) {
+    if (!st.HasOwnProp("late") || !IsObject(st.late))
+        return
+    f := dir "\resp_" st.late.id ".txt"
+    if FileExist(f) {
+        ms := ""
+        try {
+            if RegExMatch(FileRead(f, "UTF-8"), "m)^ms=(\d+)", &m)
+                ms := m[1]
+            FileDelete(f)
+        }
+        AddToLog("[Vision] (the late '" st.late.cmd "' answer came after all" (ms != "" ? " - Python took " ms " ms" : "") ")")
+        st.late := 0
+    } else if (A_TickCount - st.late.at > 60000) {
+        st.late := 0
+    }
 }
 
 ; Text in a rectangle given in the macro's usual (FindText) coordinates. "" if unavailable.

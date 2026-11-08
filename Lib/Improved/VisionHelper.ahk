@@ -49,10 +49,29 @@ VH_Start() {
             Run(exe . args, A_ScriptDir, "Hide", &pid)
             st.pid := pid
             AddToLog("[Vision] Starting the Python vision helper...")
+            SetTimer(VH_StartCheck, -30000)
             return
         }
     }
     AddToLog("[Vision] Python not found - using the built-in (slower) screen reading")
+}
+
+; [11-07] one line in the log 30 s after start-up if the helper never got ready (a friend's PC ran on the
+; slow built-in reading for days without anyone noticing). Only writes to the log.
+VH_StartCheck() {
+    static checks := 0
+    st := VH_S()
+    if (VH_Ready()) {
+        AddToLog("[Vision] Python helper is running")
+        return
+    }
+    checks += 1
+    ; still loading (the first start on a slow PC can take a minute) - look again in 30 s, up to 2 minutes
+    if (checks < 4 && st.pid && ProcessExist(st.pid)) {
+        SetTimer(VH_StartCheck, -30000)
+        return
+    }
+    AddToLog("[Vision] The Python helper didn't start - using the slower built-in reading. Fix: close the macro, run 'Setup (first time).bat', start again (details: Logs\vision_ipc\helper.log)")
 }
 
 VH_Ready() {

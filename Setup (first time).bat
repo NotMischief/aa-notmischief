@@ -43,6 +43,7 @@ if not defined PYEXE (
 echo Using Python: "%PYEXE%"
 >>"%LOG%" echo using "%PYEXE%"
 echo Installing the vision packages (numpy, OpenCV, mss, RapidOCR) - this can take a few minutes...
+"%PYEXE%" -m ensurepip --upgrade >>"%LOG%" 2>&1
 "%PYEXE%" -m pip install --upgrade pip >>"%LOG%" 2>&1
 "%PYEXE%" -m pip install numpy opencv-python mss >>"%LOG%" 2>&1
 "%PYEXE%" -m pip install rapidocr onnxruntime >>"%LOG%" 2>&1 || "%PYEXE%" -m pip install rapidocr_onnxruntime >>"%LOG%" 2>&1
@@ -55,6 +56,7 @@ if errorlevel 1 (
   pause
   exit /b
 )
+"%PYEXE%" -c "import onnxruntime; print('onnxruntime OK')" >>"%LOG%" 2>&1 || echo Text reading package missing - the macro uses Windows' own text reading instead.
 rem remember this Python for the macro (Settings\Python.txt) - otherwise it starts the newest one (e.g. 3.15)
 set "PYW=%PYEXE:python.exe=pythonw.exe%"
 >"%~dp0Settings\Python.txt" echo %PYW%

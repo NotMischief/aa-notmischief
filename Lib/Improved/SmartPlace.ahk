@@ -47,10 +47,13 @@ PL_ReadGrid(cx, cy, cw, ch, step) {
                 k := 3
                 if !PL_Excluded(px / cw, fy) {
                     argb := NumGet(scan, py * stride + px * 4, "UInt")
-                    R := (argb >> 16) & 255, G := (argb >> 8) & 255, B := argb & 255
-                    if (R >= 100 && R - G >= 70 && R > B)
+                    ; [Fix 11-07] AutoHotkey names ignore case: "R" was the same variable as the row counter "r",
+                    ; so the red value replaced the row and NumPut below failed ("Invalid parameter(s)") - this
+                    ; backup reader (used when Python isn't running) never worked
+                    cr := (argb >> 16) & 255, cg := (argb >> 8) & 255, cb := argb & 255
+                    if (cr >= 100 && cr - cg >= 70 && cr > cb)
                         k := 1
-                    else if (G >= 170 && R < 120 && B < 140)
+                    else if (cg >= 170 && cr < 120 && cb < 140)
                         k := 2
                     else
                         k := 0

@@ -371,7 +371,7 @@ IMP_Recover(fromEndScreen := false) {
         AddToLog("[Watchdog] Room map is showing - picking a room")
         return NextStep(LookForDungeonRooms)
     }
-    if FT(&X, &Y, 746, 514, 789, 530, 0, 0, AreaText) {
+    if (FT(&X, &Y, 746, 514, 789, 530, 0, 0, AreaText) || SC_Where() = "lobby") {   ; [Fix 11-08] + the lobby's own buttons
         AddToLog("[Watchdog] In the lobby - starting the mode again")
         return NextStep(StartSelectedMode)
     }

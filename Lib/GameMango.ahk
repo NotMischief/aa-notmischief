@@ -1014,7 +1014,9 @@ Reconnect() {
             AddToLog("Reconnecting to Roblox...")
             Sleep 15000
             StageGuard.Check("Reconnect", "reconnect not finished", false)   ; [Framework]
-            if (ok := FT(&X, &Y, 746, 514, 789, 530, 0, 0, AreaText)) {
+            ; [Fix 11-08] the old "Areas" picture rarely matches since the UI update (CheckLobby already asks
+            ; SC_Where too) - it never saw the lobby after a reconnect and relaunched Roblox every 5 minutes
+            if ((ok := FT(&X, &Y, 746, 514, 789, 530, 0, 0, AreaText)) || SC_Where() = "lobby") {
                 AddToLog("Reconnected Successfully!")
                 return NextStep(StartSelectedMode)
             } else if (PixelGetColor(489,341) == 0x393B3D and PixelGetColor(430,384) == 0xFFFFFF) {
@@ -1050,7 +1052,9 @@ RejoinPrivateServer() {
             Sleep(1000)
         }
 
-        if (ok := FT(&X, &Y, 746, 514, 789, 530, 0, 0, AreaText)) {
+        ; [Fix 11-08] also the lobby's own buttons (see Reconnect) - it sat in the lobby logging
+        ; "Reconnecting to Roblox..." and relaunched Roblox every 5 minutes
+        if ((ok := FT(&X, &Y, 746, 514, 789, 530, 0, 0, AreaText)) || SC_Where() = "lobby") {
             AddToLog("Reconnected Successfully!")
             return NextStep(StartSelectedMode)
         }
@@ -1129,10 +1133,16 @@ CheckForLobbyText() {
 }
 
 CheckForLobby() {
+    clLook := 0
     loop {
         Sleep 1000
         if (ok := FT(&X, &Y, 746, 514, 789, 530, 0, 0, AreaText)) {
             break
+        }
+        if (A_TickCount - clLook > 3000) {   ; [Fix 11-08] the lobby's own buttons (see CheckLobby)
+            clLook := A_TickCount
+            if (SC_Where() = "lobby")
+                break
         }
         Reconnect()
     }

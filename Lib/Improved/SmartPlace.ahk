@@ -433,19 +433,72 @@ PL_Hover(x, y) {
         return 0
     WinGetClientPos(&cx, &cy, &cw, &ch, rblxID)
     MouseMove(x, y)
-    Sleep(70)
+    ; [Settle 11-07] the game needs a moment to move the preview and recolour the range circle - read
+    ; after 70 ms the colour often still belonged to the last spot (another macro waits at least 100 ms,
+    ; adjustable). 250 ms here.
+    Sleep(250)
     r := 0
     try r := VH_Call(Format("cmd=hover`nx={}`ny={}`nw={}`nh={}`ncx={}`ncy={}", cx, cy, cw, ch, x, y), 1500)
     return (r && r.Has("ok") && r["ok"] = "1") ? r : 0
 }
-PL_HoverText(hv) => hv ? ("disc red " hv["dred"] " blue " hv["dblue"] ", ring red " hv["red"] " blue " hv["blue"] " (r " hv["br"] ")") : "no reading"
-PL_HoverSkip(hv) {
+; [Path hugger 11-07] Summer: when the screen read finds no spot, ask for spots on free ground right beside
+; the enemy path instead of clicking the fixed pattern (92% of those clicks failed). Off switch: a file
+; Settings\PathHug.txt that says Off. Returns an array of {x, y} (empty = none).
+PL_HugOn() {
     static on := -1
     if (on = -1) {
-        on := 0
+        on := 1
+        try on := InStr(FileRead(A_ScriptDir "\Settings\PathHug.txt"), "Off") ? 0 : 1
+    }
+    return on && SH_On()
+}
+PL_HugSpots(slot, avoid) {
+    out := []
+    if (!PL_HugOn() || !WinExist(rblxID))
+        return out
+    WinGetClientPos(&cx, &cy, &cw, &ch, rblxID)
+    if (cw < 200 || ch < 200)
+        return out
+    pl := PL_Placed()
+    utype := UT_Get(slot)
+    t0 := A_TickCount
+    MouseMove(Round(cw * 0.03), Round(ch * 0.95))
+    try VH_Call(Format("cmd=base`nx={}`ny={}`nw={}`nh={}", cx, cy, cw, ch), 1000)
+    SendInput(slot)                 ; hold the unit so the game paints where it can go
+    Sleep(150)
+    av := ""
+    for a in avoid
+        av .= a.x ":" a.y ";"
+    for a in pl.bad
+        av .= a.x ":" a.y ";"
+    own := ""
+    for p in pl.list
+        own .= p.x ":" p.y ";"
+    r := 0
+    try r := VH_Call(Format("cmd=hug`nx={}`ny={}`nw={}`nh={}`ntype={}`navoid={}`nroom={}`nplaced={}`nrange={}`nmap={}`nn=8", cx, cy, cw, ch, utype, av, pl.room, own, PL_Range(), PL_Map()), 2000)
+    SendInput("q")
+    Sleep(60)
+    SendInput("q")                  ; put the unit back
+    if (r && r.Has("ok") && r["ok"] = "1" && r.Has("spots")) {
+        for sp in StrSplit(r["spots"], ";") {
+            xy := StrSplit(sp, ":")
+            if (xy.Length = 2 && IsInteger(xy[1]) && IsInteger(xy[2]))
+                out.Push({x: Integer(xy[1]), y: Integer(xy[2]), hug: true})
+        }
+    }
+    PL_Log("Unit " slot " (" utype ") [path hugger]: " ((r && r.Has("info")) ? r["info"] : "no answer") " -> " out.Length " spots (" (A_TickCount - t0) " ms)")
+    return out
+}
+
+PL_HoverText(hv) => hv ? ("disc red " hv["dred"] " blue " hv["dblue"] ", ring red " hv["red"] " blue " hv["blue"] " (r " hv["br"] ")") : "no reading"
+PL_HoverSkip(hv) {
+    static on := -2
+    if (on = -2) {
+        on := -1                                   ; -1 = no Settings\HoverSkip.txt
         try on := InStr(FileRead(A_ScriptDir "\Settings\HoverSkip.txt"), "On") ? 1 : 0
     }
-    if (!on || !hv)
+    ; [11-07] on in Summer even without the file (it was tuned on Summer maps); "Off" in the file turns it off
+    if (!hv || !(on = 1 || (on = -1 && SH_On())))
         return false
     ; tuned on 60 real tries (17 placed, 43 failed): on a usable spot the range ring is drawn blue
     ; (blue cover median ~0.19), on a blocked one it's red with almost no blue (~0.05). This rule skips

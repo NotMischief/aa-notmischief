@@ -43,8 +43,10 @@ to this one, read it too — it has the owner's paths, history and open tasks (i
   leave at wave 47–49 if last and under MinDamage; optional Dungeon after N leaves (only if the
   "Dungeon on unknown maps" box is ticked).
 - `Lib/Improved/SmartPlace.ahk` — spot finding helpers, GoodSpots memory (`Settings\GoodSpots`).
+  Off switches (Settings\*.txt saying Off): HoverSkip (red-circle skip; on in Summer by default), PathHug,
+  CardWatch. Hover reads the circle 250 ms after moving (it needs time to recolour).
 - `Lib/Improved/vision_helper.py` — Python helper (RapidOCR, OpenCV, mss), file IPC in `Logs\vision_ipc`
-  (`req_*.txt` -> `resp_*.txt`). Commands: ocr, find, place, base, hover, fail, print, mini, forget, nomoney.
+  (`req_*.txt` -> `resp_*.txt`). Commands: ocr, find, place, hug (path-hugger fallback), base, hover, fail, print, mini, forget, nomoney.
   Debug pictures go to `Logs\vision_ipc\pics` (newest 300 kept).
 - `Lib/Improved/VisionHelper.ahk` — AHK side of the IPC (2 slow answers in a row -> built-in OCR for 20 s).
 - `Lib/Improved/WatchMode.ahk` — F9: picture every 10 s; reloads in the lobby when code changed and resumes.

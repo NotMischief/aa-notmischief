@@ -154,8 +154,18 @@ PlacingUnits() {
 
             while (placedCounts[slotNum] < placements && !PL_OverBudget(budgetStart, waitedStart)) {
                 placedInSweep := false
+                ; [Path hugger 11-07] Summer: free spots right beside the enemy path first, then the fixed pattern
+                sweepPoints := placementPoints
+                if PL_HugOn() {
+                    hug := PL_HugSpots(slotNum, PL_Placed().bad)
+                    if hug.Length {
+                        sweepPoints := hug.Clone()
+                        for pt in placementPoints
+                            sweepPoints.Push(pt)
+                    }
+                }
 
-                for point in placementPoints {
+                for point in sweepPoints {
                     ; Skip coordinates already used successfully or marked maxed.
                     alreadyUsed := false
                     for coord in successfulCoordinates {
@@ -199,6 +209,8 @@ PlacingUnits() {
                         AddToLog("Unit " slotNum " is at the game's limit (" placedCounts[slotNum] " counted) - moving on")
                         placedCounts[slotNum] := placements
                         break
+                    } else if point.HasOwnProp("hug") {
+                        PL_NoteBad({x: point.x, y: point.y})   ; [Path hugger] not offered again this stage
                     }
 
                     if (ModeDropdown.Text = "Fool's Hunt")
@@ -578,7 +590,7 @@ PlaceUnit(x, y, slot := 1) {
     static skipRun := 0, hoverOffUntil := 0
     if (A_TickCount > hoverOffUntil && PL_HoverSkip(hv)) {
         skipRun += 1
-        if (skipRun > 2) {
+        if (skipRun > (SH_On() ? 5 : 2)) {   ; [11-07] Summer: more patience (the check was tuned there)
             hoverOffUntil := A_TickCount + 600000, skipRun := 0
             PL_Log("Hover check skipped too many spots in a row - not using it on this map for 10 minutes")
         } else {

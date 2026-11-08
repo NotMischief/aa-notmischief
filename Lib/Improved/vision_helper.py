@@ -479,6 +479,90 @@ def cmd_place(a: dict) -> dict:
     return {"ok": "1", "x": str(int(ix * s + s // 2)), "y": str(int(iy * s + s // 2)), "info": info, "ms": ms()}
 
 
+def cmd_hug(a: dict) -> dict:
+    """[Path hugger] Fallback when 'place' found no spot: free ground in a band right beside the enemy path
+    (the path learnt from the paint at the start of the stage), most path in reach first, spread out.
+    Used instead of the fixed pattern, which clicked the crowded middle (92% of those clicks failed).
+    Returns up to n spots as 'x:y;x:y;...' in client coordinates."""
+    t0 = time.perf_counter()
+    x, y, w, h = (int(a[k]) for k in ("x", "y", "w", "h"))
+    utype = a.get("type", "Hybrid")
+    s = 2  # half resolution
+    red, green, excl, waits, strict = _read_paint(x, y, w, h, s)
+    hh, ww = red.shape
+    mx = float(a.get("mx", w * 0.03)) / s
+    my = float(a.get("my", h * 0.95)) / s
+    red, ring = _strip_ring(red, mx, my)
+    rng = ring if ring else max(8, int(a.get("range", "140")) // s)
+    tint = _tint_mask(x, y, w, h, s)
+    if tint is not None and tint.shape == red.shape:
+        red = red | tint
+    ground = ~red & ~green
+    allowed = {"Hill": green, "Ground": ground}.get(utype, green | ground) & ~excl
+    mem = _mem_get(a.get("map", ""), (hh, ww))
+    if mem is not None:
+        allowed &= mem < 2
+    room = a.get("room", "")
+    rb = _ROOM_BAD.get(room)
+    if rb is not None and rb.shape == (hh, ww):
+        allowed &= ~rb
+    for pair in filter(None, a.get("avoid", "").split(";")):      # spots that already failed: 40 px around
+        try:
+            ax, ay = (int(v) // s for v in pair.split(":"))
+            allowed[max(0, ay - 20):ay + 20, max(0, ax - 20):ax + 20] = False
+        except ValueError:
+            pass
+    ms = lambda: f"{(time.perf_counter() - t0) * 1000:.0f}"
+    if not room:
+        return {"ok": "0", "info": "no path map", "ms": ms()}
+    src = strict if int((strict & ~excl).sum()) >= 0.004 * strict.size else red
+    cov, _ = _room_cov(room, src, excl, rng)
+    path = _ROOM["path"]
+    if path is None or _ROOM["path_px"] <= 0 or float(cov.max()) <= 0:
+        return {"ok": "0", "info": "no path learnt", "ms": ms()}
+    # the learnt "path" also holds big red blocks (rocks, buildings) and speckled tint - keep the ROAD: drop
+    # specks, then drop anything thicker than ~32 px (on your saved Otherworldly Plane pictures this kept
+    # the road and dropped the big rock). Too little left -> use the whole learnt path as before.
+    p8 = cv2.morphologyEx(path.astype(np.uint8), cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+    thick = cv2.morphologyEx(p8, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17)))
+    road = p8 & ~cv2.dilate(thick, np.ones((9, 9), np.uint8))
+    nlab, lab, st, _ = cv2.connectedComponentsWithStats(road, connectivity=8)
+    keep = np.zeros_like(road)
+    for i in range(1, nlab):
+        if st[i, cv2.CC_STAT_AREA] >= 150:
+            keep[lab == i] = 1
+    if int(keep.sum()) >= 150:
+        path = keep
+    dpath = cv2.distanceTransform((path == 0).astype(np.uint8), cv2.DIST_L2, 3)   # how far from the path
+    clear = cv2.distanceTransform(allowed.astype(np.uint8), cv2.DIST_L2, 3)        # how far from anything blocked
+    far = max(14, min(int(rng * 0.8), 50))
+    cand = (dpath >= 8) & (dpath <= far) & (clear >= 9)    # beside the road (16-100 px), 18 px clear of anything
+    if not cand.any():
+        return {"ok": "0", "info": f"nothing free beside the path (band 16-{far * s} px)", "ms": ms()}
+    score = np.where(cand, cov, -1.0).astype(np.float32)
+    top = float(cov.max())
+    for pair in filter(None, a.get("placed", "").split(";")):     # our own units already cover their stretch
+        try:
+            px, py = (int(v) // s for v in pair.split(":"))
+        except ValueError:
+            continue
+        d = np.hypot(np.arange(ww)[None, :] - px, np.arange(hh)[:, None] - py)
+        score -= (0.25 * top * np.clip(1 - d / (min(rng, 70) * 0.8), 0, 1)).astype(np.float32)
+    score[~cand] = -1.0
+    n = max(1, min(12, int(a.get("n", "8"))))
+    out = []
+    for _ in range(n):
+        iy, ix = np.unravel_index(int(np.argmax(score)), score.shape)
+        if score[iy, ix] <= 0:
+            break
+        out.append((int(ix * s + s // 2), int(iy * s + s // 2)))
+        score[max(0, iy - 22):iy + 23, max(0, ix - 22):ix + 23] = -1.0     # next spot at least ~45 px away
+    if not out:
+        return {"ok": "0", "info": "no spot beside the path reaches it", "ms": ms()}
+    _save_paint("hug")
+    return {"ok": "1", "spots": ";".join(f"{px}:{py}" for px, py in out), "n": str(len(out)),
+            "info": f"{len(out)} spots beside the path (band 16-{far * s} px, paint waits {waits})", "ms": ms()}
+
 def cmd_nomoney(a: dict) -> dict:
     """Is the game's red "Not enough money!" message showing (bottom middle of the screen)?"""
     x, y, w, h = (int(a[k]) for k in ("x", "y", "w", "h"))
@@ -641,6 +725,8 @@ def handle(a: dict) -> dict:
         return cmd_base(a)
     if c == "hover":
         return cmd_hover(a)
+    if c == "hug":
+        return cmd_hug(a)
     if c == "quit":
         raise SystemExit
     return {"ok": "0", "info": "unknown command"}

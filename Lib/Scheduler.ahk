@@ -351,7 +351,7 @@ Sched_ModeFields(mode) {
     static stories := ["Planet Greenie", "Walled City", "Snowy Town", "Sand Village", "Navy Bay", "Fiend City", "Spirit World", "Ant Kingdom", "Magic Town", "Haunted Academy", "Magic Hills", "Space Center", "Alien Spaceship", "Fabled Kingdom", "Ruined City", "Puppet Island", "Virtual Dungeon", "Snowy Kingdom", "Dungeon Throne", "Mountain Temple", "Rain Village", "Shibuya District"]
     static legends := ["Magic Hills", "Spirit Invasion", "Space Center", "Fabled Kingdom", "Ruined City", "Virtual Dungeon", "Dungeon Throne", "Rain Village"]
     static raids := ["Ant Kingdom", "Sacred Planet", "Strange Town", "Ruined City", "Cursed Festival", "Future City (Tyrant)", "Storm Hideout", "Future City", "Nightmare Train", "Sand Village"]
-    static portals := ["Alien Portal", "Puppet Portal", "Demon Leader's Portal", "Eclipse Portal", "Noble Portal", "Shibuya Portal"]
+    static portals := ["Alien Portal", "Puppet Portal", "Demon Leader's Portal", "Eclipse Portal", "Noble Portal", "Shibuya Portal", "Sky Portal"]
     switch mode {
         case "Story":
             return [{label: "STAGE", ctrl: "StoryDropdown", items: stories}

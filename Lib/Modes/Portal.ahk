@@ -15,7 +15,10 @@ GetMapForFarming(name) {
         "Puppet Island", "Puppet Portal",
 
         "Shibuya Portal", "Shibuya District",
-        "Shibuya District", "Shibuya Portal"
+        "Shibuya District", "Shibuya Portal",
+
+        "Sky Portal", "Sky Island",       ; [UPD 21.0] new portal
+        "Sky Island", "Sky Portal"
     )
     if (farmMap.Has(name)) {
         return farmMap[name]
@@ -51,6 +54,13 @@ SwitchActiveFarm() {
     } else {
         newMap := GetMapForFarming(PortalDropdown.Text)
         if (newMap != "no map found") {
+            ; [11-08] Sky Island is not in the Story list - setting it would stop the macro with an error
+            try {
+                StoryDropdown.Text := newMap
+            } catch {
+                AddToLog("[Portal] No Story map called " newMap " - can't farm more " PortalDropdown.Text "s there")
+                return
+            }
             ModeDropdown.Text := "Story"
             StoryActDropdown.Text := "Infinity"
             StoryDropdown.Text := newMap
@@ -70,20 +80,7 @@ SwitchActiveFarm() {
 }
 
 HandlePortalJoin() {
-    switch PortalDropdown.text{
-        case "Demon Leader's Portal":
-            selectedPortal := "De"
-        case "Puppet Portal":
-            selectedPortal := "P"
-        case "Alien Portal":
-            selectedPortal := "A"
-        case "Noble Portal":
-            selectedPortal := "N"
-        case "Shibuya Portal":
-            selectedPortal := "S"
-        case "Eclipse Portal":
-            selectedPortal := "E"
-    }
+    selectedPortal := PT_SearchText(PortalDropdown.Text)
     joinType := PortalJoinDropdown.Text
 
     FixClick(640, 70) ; Closes Player leaderboard
@@ -97,40 +94,70 @@ HandlePortalJoin() {
 
     if (joinType = "Solo") {
         AddToLog("Soloing " selectedPortal)
-        HandlePortalSelection()
-        FixClick(400, 460)  ; Start portal
+        if (HandlePortalSelection())
+            PT_StartPortal()
     } else if (joinType = "Creating") {
         AddToLog("Creating " selectedPortal)
-        HandlePortalSelection()
-        AddToLog("Waiting 15 seconds for others to join")
-        Sleep(15000)
-        FixClick(400, 460)  ; Start portal
+        if (HandlePortalSelection()) {
+            AddToLog("Waiting 15 seconds for others to join")
+            Sleep(15000)
+            PT_StartPortal()
+        }
     } else {
         AddToLog("Please join " selectedPortal " manually")
         Sleep(5000)
     }
 }
 
+; [UPD 21.0 11-08] clicking a portal opens a popup NEXT TO the tile with Use / Delete / View, so the buttons
+; move (Use was seen from y 369 to 475). The old fixed "Open" click (250, 350) could land on Delete. Use is now
+; found by its colours (PT_FindUse); if it isn't there, nothing is clicked - the inventory is closed and logged.
 HandlePortalSelection() {
-    sleep 200
-    FixClick(211, 289)  ; Click On Portal
+    Sleep(200)
+    FixClick(215, 290)  ; first portal tile
+    btn := 0
+    start := A_TickCount
+    while (A_TickCount - start < 5000) {   ; the popup draws its buttons a second or two after the info
+        Sleep(400)
+        if (btn := PT_FindUse())
+            break
+    }
+    if (!btn) {
+        AddToLog("[Portal] Couldn't find the Use button (no " PortalDropdown.Text " left?) - closing the inventory, nothing pressed")
+        HandlePortalFallback(true)
+        return false
+    }
+    AddToLog("[Portal] Pressing Use at " btn.x ", " btn.y)
+    FixClick(btn.x, btn.y)
     Sleep(1500)
-    CheckForPortal(true)
-    Sleep(1500)
-    FixClick(250, 350) ; Click Open
-    Sleep(1500)
+    return true
+}
+
+; After Use: the old Start spot - only if the popup is really gone (otherwise Use didn't work: close, don't click).
+PT_StartPortal() {
+    if (PT_FindUse()) {
+        AddToLog("[Portal] The Use button is still showing - the portal didn't open. Closing the inventory")
+        FixClick(660, 189)
+        return false
+    }
+    FixClick(400, 460)  ; Start portal (same spot as before UPD 21.0 - not checked on the new screens yet)
+    return true
 }
 
 ClickItemsAndPortalsTab() {
-    FixClick(33, 300) ; Click items
+    FixClick(34, 296) ; Click items
     Sleep(1500)
-    FixClick(435, 230) ; Click portals tab
+    FixClick(535, 225) ; Click portals tab  [UPD 21.0: All | Skins | Relics | Charms | Artifacts | Portals | Gifts]
     Sleep(1500)
 }
 
 ClickSearchAndTypePortal(selectedPortal) {
-    FixClick(510, 190) ; Click search
+    FixClick(490, 185) ; Click search  [UPD 21.0]
     Sleep(1500)
+    SendInput("^a")             ; clear what was typed before
+    Sleep(100)
+    SendInput("{Backspace 15}")
+    Sleep(200)
     ; Loops through every character in selectedPortal one by one
     Loop Parse, selectedPortal {
     SendInput(A_LoopField)
@@ -174,20 +201,7 @@ HandlePortalFallback(lobby := false) {
 
 HandlePortalEnd() {
     global inChallengeMode, challengeStartTime
-    switch PortalDropdown.text{
-        case "Demon Leader's Portal":
-            selectedPortal := "De"
-        case "Puppet Portal":
-            selectedPortal := "P"
-        case "Alien Portal":
-            selectedPortal := "A"
-        case "Noble Portal":
-            selectedPortal := "N"
-        case "Shibuya Portal":
-            selectedPortal := "S"
-        case "Eclipse Portal":
-            selectedPortal := "E"
-    }
+    selectedPortal := PT_SearchText(PortalDropdown.Text)
 
     Loop {
         Sleep(3000)
@@ -287,20 +301,7 @@ ClickUsePortal() {
 }
 
 HandlePortalReJoin() {
-    switch PortalDropdown.text{
-        case "Demon Leader's Portal":
-            selectedPortal := "De"
-        case "Puppet Portal":
-            selectedPortal := "P"
-        case "Alien Portal":
-            selectedPortal := "A"
-        case "Noble Portal":
-            selectedPortal := "N"
-        case "Shibuya Portal":
-            selectedPortal := "S"
-        case "Eclipse Portal":
-            selectedPortal := "E"
-    }
+    selectedPortal := PT_SearchText(PortalDropdown.Text)
 
     joinType := PortalJoinDropdown.Text
 
@@ -318,7 +319,7 @@ HandlePortalReJoin() {
 
         ClickReturnToLobby()
 
-        if (ok := FT(&X, &Y, 746, 514, 789, 530, 0, 0, AreaText)) {
+        if ((ok := FT(&X, &Y, 746, 514, 789, 530, 0, 0, AreaText)) || SC_Where() = "lobby") {   ; [11-08] + lobby buttons
             if (!inChallengeMode && ScheduleTick()) {
                 AddToLog("Schedule: next step")
                 return NextStep(StartSelectedMode)
@@ -347,15 +348,16 @@ HandlePortalReJoin() {
 
             if (joinType = "Solo") {
                 AddToLog("Soloing " selectedPortal)
-                HandlePortalSelection()
-                FixClick(400, 460)  ; Start portal
+                if (HandlePortalSelection())
+                    PT_StartPortal()
                 return NextStep(RestartStage)
             } else if (joinType = "Creating") {
                 AddToLog("Creating " selectedPortal)
-                HandlePortalSelection()
-                AddToLog("Waiting 15 seconds for others to join")
-                Sleep(15000)
-                FixClick(400, 460)  ; Start portal
+                if (HandlePortalSelection()) {
+                    AddToLog("Waiting 15 seconds for others to join")
+                    Sleep(15000)
+                    PT_StartPortal()
+                }
                 return NextStep(RestartStage)
             } else {
                 AddToLog("Please join " selectedPortal " manually")
@@ -366,3 +368,118 @@ HandlePortalReJoin() {
 }
     
 
+; ---- [UPD 21.0] portal helpers -------------------------------------------------------------------------------
+; what to type in the inventory search for each portal (whole first word - "S" now finds Shibuya AND Sky)
+PT_SearchText(name) {
+    switch name {
+        case "Demon Leader's Portal":
+            return "Demon"
+        case "Puppet Portal":
+            return "Puppet"
+        case "Alien Portal":
+            return "Alien"
+        case "Noble Portal":
+            return "Noble"
+        case "Shibuya Portal":
+            return "Shibuya"
+        case "Eclipse Portal":
+            return "Eclipse"
+        case "Sky Portal":
+            return "Sky"
+    }
+    return name
+}
+
+; The portal popup's Use button: a wide green bar with a red bar (Delete) right under it and a yellow bar
+; (View) under that, wherever the popup opened. Returns {x, y, redTop} (the middle of Use, at least 6 px above
+; Delete) or 0. Tested on 24 saved pictures: Use found in all 7 with the popup open, nothing in the other 17.
+PT_FindUse() {
+    pic := SH_Grab(0, 0, 799, 598)
+    y := 100
+    while (y <= 560) {
+        x := 120
+        while (x <= 700) {
+            if (PT_G(SH_Px(pic, x, y)) && PT_RedBelow(pic, x, y)) {
+                if (s := PT_StackAt(pic, x, y))
+                    return s
+            }
+            x += 6
+        }
+        y += 3
+    }
+    return 0
+}
+
+PT_G(c) {
+    cr := (c >> 16) & 255, cg := (c >> 8) & 255, cb := c & 255
+    return (cg >= 140 && cg - cr >= 80 && cb <= 90)
+}
+PT_R(c) {
+    cr := (c >> 16) & 255, cg := (c >> 8) & 255, cb := c & 255
+    return (cr >= 140 && cg <= 70 && cb <= 70)
+}
+PT_Y(c) {
+    cr := (c >> 16) & 255, cg := (c >> 8) & 255, cb := c & 255
+    return (cr >= 200 && cg >= 130 && cb <= 90)
+}
+PT_Is(kind, c) => (kind = "g" ? PT_G(c) : kind = "r" ? PT_R(c) : PT_Y(c))
+
+; quick test before the full check: any red pixel 10-34 px below
+PT_RedBelow(pic, x, y) {
+    d := 10
+    while (d <= 34) {
+        if (y + d <= 598 && PT_R(SH_Px(pic, x, y + d)))
+            return true
+        d += 2
+    }
+    return false
+}
+
+; how many pixels of this colour follow in a row (up/down: dy = -1/1, left/right: dx = -1/1)
+PT_Run(pic, x, y, kind, dx, dy, maxn) {
+    n := 0
+    while (n < maxn) {
+        px := x + dx * (n + 1), py := y + dy * (n + 1)
+        if (px < 0 || px > 799 || py < 0 || py > 598 || !PT_Is(kind, SH_Px(pic, px, py)))
+            break
+        n += 1
+    }
+    return n
+}
+
+; the first bar of this colour within 12 px below yFrom: [top, bottom] or 0
+PT_BarBelow(pic, x, yFrom, kind) {
+    loop 12 {
+        py := yFrom + A_Index
+        if (py > 598)
+            return 0
+        if (PT_Is(kind, SH_Px(pic, x, py)))
+            return [py, py + PT_Run(pic, x, py, kind, 0, 1, 40)]
+    }
+    return 0
+}
+
+PT_StackAt(pic, x, y) {
+    gt := y - PT_Run(pic, x, y, "g", 0, -1, 40), gb := y + PT_Run(pic, x, y, "g", 0, 1, 40)
+    if (gb - gt + 1 < 10 || gb - gt + 1 > 32)
+        return 0
+    row := gt + 3
+    if (!PT_G(SH_Px(pic, x, row)))
+        return 0
+    bl := x - PT_Run(pic, x, row, "g", -1, 0, 200), br := x + PT_Run(pic, x, row, "g", 1, 0, 200)
+    if (br - bl + 1 < 60)
+        return 0
+    cl := bl + 10, cr := br - 10            ; measure near the bar edges - the words sit in the middle
+    rb := PT_BarBelow(pic, cl, gb, "r")
+    if (!rb || rb[2] - rb[1] + 1 < 10 || rb[2] - rb[1] + 1 > 32)
+        return 0
+    yb := PT_BarBelow(pic, cl, rb[2], "y")
+    if (!yb || yb[2] - yb[1] + 1 < 10 || yb[2] - yb[1] + 1 > 32)
+        return 0
+    gy := (gt + gb) // 2, ry := (rb[1] + rb[2]) // 2, yy := (yb[1] + yb[2]) // 2
+    if (!(PT_G(SH_Px(pic, cr, gy)) && PT_R(SH_Px(pic, cr, ry)) && PT_Y(SH_Px(pic, cr, yy))))
+        return 0                            ; the same three bars on the right edge too
+    if (gy > rb[1] - 6)
+        return 0                            ; never anywhere near Delete
+    return {x: (bl + br) // 2, y: gy, redTop: rb[1]}
+}

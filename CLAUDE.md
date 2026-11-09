@@ -65,6 +65,9 @@ to this one, read it too — it has the owner's paths, history and open tasks (i
 Panel X (276,227) · hotbar cards x0 = 212 + 64*(slot-1), y 512–570 · neutral click (607,553) ·
 gear (27,572) · Settings X (581,147) · minimap box (645–795, 440–595) · wave text (150–310, 60–96) ·
 Tab damage list (555–795, 70–370), its X (564,72).
+Inventory (Items 34,296): tabs All|Skins|Relics|Charms|Artifacts|Portals(535,225)|Gifts · search (490,185) ·
+X (660,189) · first tile (215,290). Clicking an item opens a popup next to the tile with Use (green) /
+Delete (red) / View (yellow) - it moves, so Portal finds Use by the colour stack (`PT_FindUse`), never a fixed spot.
 
 ## Release (every change)
 1. Edit in a clean way; keep the file's encoding/line endings.
